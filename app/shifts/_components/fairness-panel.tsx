@@ -27,6 +27,7 @@ export function FairnessPanel({
               <th className="py-1.5 pr-4 font-medium">Person</th>
               <th className="px-3 py-1.5 text-center font-medium">This week</th>
               <th className="px-3 py-1.5 text-center font-medium">Nights (week)</th>
+              <th className="px-3 py-1.5 text-center font-medium">Kitchen (week)</th>
               <th className="px-3 py-1.5 text-center font-medium">Nights (all-time)</th>
               <th className="px-3 py-1.5 text-center font-medium">Kitchen (all-time)</th>
               <th className="px-3 py-1.5 text-center font-medium">Total (all-time)</th>
@@ -38,6 +39,7 @@ export function FairnessPanel({
                 <td className="py-1.5 pr-4 font-medium">{p.name}</td>
                 <td className="px-3 py-1.5 text-center">{weekCount(p.id)}</td>
                 <td className="px-3 py-1.5 text-center">{weekCount(p.id, "night")}</td>
+                <td className="px-3 py-1.5 text-center">{weekCount(p.id, "kitchen")}</td>
                 <td className="px-3 py-1.5 text-center">
                   {allTime.get(p.id)?.nightCount ?? 0}
                 </td>

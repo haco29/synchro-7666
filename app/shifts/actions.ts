@@ -72,11 +72,14 @@ export async function renamePersonAction(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
   if (name) renamePerson(requireId(formData.get("personId")), name);
   revalidatePath("/shifts", "layout");
+  // A renamed/deactivated person changes what the published share page shows.
+  revalidatePath("/s/[token]", "page");
 }
 
 export async function setPersonActiveAction(formData: FormData) {
   setPersonActive(requireId(formData.get("personId")), formData.get("active") === "1");
   revalidatePath("/shifts", "layout");
+  revalidatePath("/s/[token]", "page");
 }
 
 // ---- unavailability ----

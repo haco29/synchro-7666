@@ -41,8 +41,8 @@ Task descriptions only — no checkboxes. Live task status lives in `todo.md`.
 
 ### Phase 1: Foundation
 
-- **Task 1: Domain layer + tooling.** Add `better-sqlite3` + `vitest` deps and
-  `test` script. Create `lib/shifts/types.ts` (Person, ShiftType, Assignment,
+- **Task 1: Domain layer + tooling.** Add `vitest` dep and `test` script
+  (SQLite uses the built-in `node:sqlite`, so no DB dependency is added). Create `lib/shifts/types.ts` (Person, ShiftType, Assignment,
   WeekSchedule, Constraint, GenerateInput/Result) and `lib/shifts/week.ts`
   (Sunday-of-week, week date list, date formatting). Unit tests for week math.
   *Acceptance:* types compile; `pnpm test` green; `pnpm build` passes.
@@ -123,7 +123,7 @@ All spec success criteria met; `pnpm build` + `pnpm test` green; ready for
 |------|--------|------------|
 | Next 16 API drift from habit (async params, revalidateTag signature) | Med | Conventions pinned in this plan from bundled docs; consult `node_modules/next/dist/docs/` when unsure |
 | Scheduler fairness quality (greedy gets stuck) | Med | Swap-improvement pass + fairness unit tests with thresholds; gaps reported not hidden |
-| `better-sqlite3` native build issues with pnpm | Low | Falls back to `node:sqlite` (Node ≥ 20.9 required by Next 16 anyway) |
+| SQLite driver availability | Low | Uses the built-in `node:sqlite` (Node ≥ 20.9, required by Next 16 anyway) — no native dependency to build |
 | No auth on admin (accepted for v1) | Low | Documented in spec; share token separate |
 
 ## Open Questions
@@ -135,6 +135,7 @@ None — spec decisions resolved with organizer on 2026-07-13.
 - [x] /spec completed
 - [x] /plan completed
 - [x] /build completed
-- [x] /test completed (24/24 tests green across 4 files; production build compiles; browser flow verified during build)
+- [x] /test completed (27/27 tests green across 4 files; production build compiles; browser flow verified during build)
 - [x] /review completed (code-reviewer agent: 0 critical, 6 important — all fixed: slot validation, atomic seat swap, duplicate-name handling, inactive-holder display, published-week regenerate guard, removed half-wired weekday constraint kind; suggestions applied: canonical week URLs, timing-safe token compare, capped share history, next/link nav, full double-booking highlights)
-- [x] /code-simplify completed (extracted SeatEditor + FairnessPanel from the week page into _components/, removed duplicate per-cell computation on the share page; 26/26 tests + build + lint green after each step)
+- [x] /code-simplify completed (extracted SeatEditor + FairnessPanel from the week page into _components/, removed duplicate per-cell computation on the share page; build + lint green after each step)
+- [x] PR review (CodeRabbit) addressed: share-page revalidation on rename/deactivate, stale-previousPersonId swap guard, add-person reactivation, kitchen-per-week fairness column, DB durability doc, artifact test-count/dependency sync (27/27 tests green)

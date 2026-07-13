@@ -42,6 +42,17 @@ CREATE TABLE IF NOT EXISTS settings (
 
 let db: DatabaseSync | null = null;
 
+/**
+ * Opens (and lazily migrates) the SQLite database.
+ *
+ * DEPLOYMENT REQUIREMENT: the directory below must be a WRITABLE, DURABLE
+ * filesystem — a persistent disk, VM, or container with a mounted volume.
+ * Serverless/edge hosts (e.g. Vercel, Netlify Functions) have a read-only
+ * or ephemeral filesystem: writes will fail or be lost on every redeploy.
+ * To deploy there, point the data layer at a networked DB (e.g. Turso/libSQL
+ * or Postgres) instead of this local file. Set SYNCHRO_DATA_DIR to the mount
+ * path in production.
+ */
 export function getDb(): DatabaseSync {
   if (db) return db;
   const dir = process.env.SYNCHRO_DATA_DIR ?? path.join(process.cwd(), "data");

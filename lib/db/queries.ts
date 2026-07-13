@@ -23,8 +23,13 @@ export function listPeople(includeInactive = false): Person[] {
 }
 
 export function addPerson(name: string): void {
-  // OR IGNORE: adding an existing name is a harmless no-op, not an error page.
-  getDb().prepare("INSERT OR IGNORE INTO people (name) VALUES (?)").run(name.trim());
+  // Re-adding an existing name reactivates them rather than silently doing
+  // nothing — that's what an admin "bringing someone back" expects.
+  getDb()
+    .prepare(
+      "INSERT INTO people (name) VALUES (?) ON CONFLICT(name) DO UPDATE SET active = 1",
+    )
+    .run(name.trim());
 }
 
 export function renamePerson(id: number, name: string): void {
@@ -150,14 +155,20 @@ export function swapSeat(
       .prepare("SELECT 1 FROM assignments WHERE date = ? AND slot = ? AND person_id = ?")
       .get(date, slot, newPersonId);
     if (!alreadySeated) {
+      let proceed = true;
       if (previousPersonId !== null) {
-        db.prepare(
-          "DELETE FROM assignments WHERE date = ? AND slot = ? AND person_id = ?",
-        ).run(date, slot, previousPersonId);
+        const { changes } = db
+          .prepare("DELETE FROM assignments WHERE date = ? AND slot = ? AND person_id = ?")
+          .run(date, slot, previousPersonId);
+        // Stale previousPersonId — the seat was already changed elsewhere.
+        // Abort rather than insert, which would push the slot over capacity.
+        if (Number(changes) === 0) proceed = false;
       }
-      db.prepare(
-        "INSERT INTO assignments (week_start, date, slot, person_id) VALUES (?, ?, ?, ?)",
-      ).run(weekStart, date, slot, newPersonId);
+      if (proceed) {
+        db.prepare(
+          "INSERT INTO assignments (week_start, date, slot, person_id) VALUES (?, ?, ?, ?)",
+        ).run(weekStart, date, slot, newPersonId);
+      }
     }
     db.exec("COMMIT");
   } catch (e) {

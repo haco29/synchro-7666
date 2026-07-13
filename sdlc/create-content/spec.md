@@ -86,7 +86,7 @@ Each day has exactly these assignment slots:
 
 ## Project structure
 
-```
+```text
 app/
   layout.tsx            # site shell + nav
   page.tsx              # home: feature cards (Shifts, …future)

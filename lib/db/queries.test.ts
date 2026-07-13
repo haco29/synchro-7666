@@ -91,6 +91,21 @@ describe("db layer", () => {
     );
   });
 
+  it("aborts a swap with a stale previousPersonId instead of overfilling", () => {
+    const [alice, bob] = q.listPeople(true);
+    q.replaceWeekAssignments("2026-07-26", [
+      { date: "2026-07-26", slot: "night", personId: alice.id },
+    ]);
+    q.addPerson("Dave");
+    const dave = q.listPeople(true).find((p) => p.name === "Dave")!;
+    // Bob was never in this seat — a stale form claims he was. The insert must
+    // not run, or the slot would hold two people with no one removed.
+    q.swapSeat("2026-07-26", "2026-07-26", "night", bob.id, dave.id);
+    const seats = q.listAssignments("2026-07-26");
+    expect(seats).toHaveLength(1);
+    expect(seats[0].personId).toBe(alice.id);
+  });
+
   it("tracks week publishing", () => {
     expect(q.isWeekPublished("2026-07-12")).toBe(false);
     q.setWeekPublished("2026-07-12", true);

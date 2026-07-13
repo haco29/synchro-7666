@@ -8,7 +8,7 @@
 
 ## Checkpoint: Foundation
 
-- [x] `pnpm test` green (21 tests)
+- [x] `pnpm test` green (21 tests at end of foundation phase; 27 in the final suite)
 - [x] `pnpm build` green
 
 ## Phase 2: Core feature slices
@@ -32,6 +32,6 @@
 
 - [x] All spec success criteria met (browser-verified: publish → share link
       renders read-only with per-person highlight; invalid token → 404)
-- [x] `pnpm build` + `pnpm test` green (24 tests)
+- [x] `pnpm build` + `pnpm test` green (27 tests)
 - [x] Ready for /test, /review, /code-simplify, /pr (all three stages run;
       review findings fixed and re-verified in browser)
