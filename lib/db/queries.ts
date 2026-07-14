@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, gte, lt, lte, sql } from "drizzle-orm";
 import type { LibSQLDatabase } from "drizzle-orm/libsql";
 import { getDb } from "./index";
-import { assignments, constraints, people, teams, weeks } from "./schema";
+import { assignments, constraints, people, weeks } from "./schema";
 import * as schema from "./schema";
 import type { Assignment, Constraint, Person, PersonHistory, SlotType } from "../shifts/types";
 import { addDays } from "../shifts/week";
@@ -352,28 +352,4 @@ export async function historyBefore(
     kitchenCount: Number(r.kitchens),
     totalCount: Number(r.total),
   }));
-}
-
-// ---- settings ----
-
-/** The team's share token (per-team public link; superseded by auth). */
-export async function getShareToken(teamId: number): Promise<string> {
-  const row = (
-    await getDb()
-      .select({ shareToken: teams.shareToken })
-      .from(teams)
-      .where(eq(teams.id, teamId))
-      .limit(1)
-  )[0];
-  if (!row) throw new Error(`Team ${teamId} not found`);
-  return row.shareToken;
-}
-
-/** Resolve a team by its public share token — for the unauthenticated /s/[token] route. */
-export async function getTeamIdByShareToken(token: string): Promise<number | null> {
-  if (!token) return null;
-  const row = (
-    await getDb().select({ id: teams.id }).from(teams).where(eq(teams.shareToken, token)).limit(1)
-  )[0];
-  return row?.id ?? null;
 }

@@ -33,7 +33,7 @@ describe("schema (initial migration)", () => {
     const { db } = await freshDb();
     const [team] = await db
       .insert(schema.teams)
-      .values({ name: "Team A", shareToken: "tok-a" })
+      .values({ name: "Team A" })
       .returning();
 
     await db.insert(schema.people).values({ teamId: team.id, name: "Dana" });
@@ -47,11 +47,11 @@ describe("schema (initial migration)", () => {
     const { db } = await freshDb();
     const [a] = await db
       .insert(schema.teams)
-      .values({ name: "Team A", shareToken: "tok-a" })
+      .values({ name: "Team A" })
       .returning();
     const [b] = await db
       .insert(schema.teams)
-      .values({ name: "Team B", shareToken: "tok-b" })
+      .values({ name: "Team B" })
       .returning();
 
     await db.insert(schema.people).values({ teamId: a.id, name: "Dana" });
@@ -64,7 +64,7 @@ describe("schema (initial migration)", () => {
     const { db } = await freshDb();
     const [team] = await db
       .insert(schema.teams)
-      .values({ name: "Team A", shareToken: "tok-a" })
+      .values({ name: "Team A" })
       .returning();
 
     await db.insert(schema.weeks).values({ teamId: team.id, weekStart: "2026-07-19" });
@@ -74,19 +74,11 @@ describe("schema (initial migration)", () => {
     ).rejects.toThrow();
   });
 
-  it("requires a unique share_token per team", async () => {
-    const { db } = await freshDb();
-    await db.insert(schema.teams).values({ name: "Team A", shareToken: "dup" });
-    await expect(
-      db.insert(schema.teams).values({ name: "Team B", shareToken: "dup" }),
-    ).rejects.toThrow();
-  });
-
   it("cascades deletes from team → people → constraints, and team → weeks → assignments", async () => {
     const { db, client } = await freshDb();
     const [team] = await db
       .insert(schema.teams)
-      .values({ name: "Team A", shareToken: "tok-a" })
+      .values({ name: "Team A" })
       .returning();
     const [person] = await db
       .insert(schema.people)

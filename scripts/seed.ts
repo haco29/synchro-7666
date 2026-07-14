@@ -1,5 +1,4 @@
 import { DatabaseSync } from "node:sqlite";
-import { randomBytes } from "node:crypto";
 import path from "node:path";
 import { eq } from "drizzle-orm";
 import { createClient } from "@libsql/client";
@@ -13,7 +12,6 @@ import { isIsoDate } from "../lib/shifts/week.ts";
 export const DEFAULT_TEAM_NAME = "Default Team";
 
 export interface SeedSource {
-  shareToken: string | null;
   people: { name: string; active: boolean }[];
   weeks: { weekStart: string; published: boolean }[];
 }
@@ -34,10 +32,6 @@ export function readSourceDb(dbPath: string): SeedSource {
       }[]
     ).map((r) => ({ name: r.name, active: !!r.active }));
 
-    const tokenRow = src
-      .prepare("SELECT value FROM settings WHERE key = 'share_token'")
-      .get() as { value: string } | undefined;
-
     const weeks = (
       src.prepare("SELECT week_start, published FROM weeks ORDER BY week_start").all() as {
         week_start: string;
@@ -50,7 +44,7 @@ export function readSourceDb(dbPath: string): SeedSource {
       .filter((r) => isIsoDate(r.week_start))
       .map((r) => ({ weekStart: r.week_start, published: !!r.published }));
 
-    return { shareToken: tokenRow?.value ?? null, people, weeks };
+    return { people, weeks };
   } finally {
     src.close();
   }
@@ -75,10 +69,9 @@ export async function seed(db: Db, source: SeedSource): Promise<{ teamId: number
   )[0];
 
   if (!team) {
-    const shareToken = source.shareToken ?? randomBytes(16).toString("hex");
     [team] = await db
       .insert(schema.teams)
-      .values({ name: DEFAULT_TEAM_NAME, shareToken, clerkOrgId: null })
+      .values({ name: DEFAULT_TEAM_NAME, clerkOrgId: null })
       .returning();
   }
 
@@ -116,8 +109,7 @@ async function main() {
   const { teamId } = await seed(db, source);
 
   console.log(
-    `Seeded "${DEFAULT_TEAM_NAME}" (#${teamId}): ${source.people.length} people, ${source.weeks.length} week(s)` +
-      `${source.shareToken ? "" : " (generated a new share_token)"}.`,
+    `Seeded "${DEFAULT_TEAM_NAME}" (#${teamId}): ${source.people.length} people, ${source.weeks.length} week(s).`,
   );
 }
 

@@ -27,7 +27,7 @@ function stubAuth(value: Record<string, unknown>) {
 async function seedDefaultTeam(db: LibSQLDatabase<typeof schema>) {
   await db
     .insert(schema.teams)
-    .values({ name: "Default Team", shareToken: "seed-token", clerkOrgId: null })
+    .values({ name: "Default Team", clerkOrgId: null })
     .returning();
 }
 

@@ -75,15 +75,12 @@ export async function renamePersonAction(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
   if (name) await renamePerson(teamId, requireId(formData.get("personId")), name);
   revalidatePath("/shifts", "layout");
-  // A renamed/deactivated person changes what the published share page shows.
-  revalidatePath("/s/[token]", "page");
 }
 
 export async function setPersonActiveAction(formData: FormData) {
   const { teamId } = await requireAdmin();
   await setPersonActive(teamId, requireId(formData.get("personId")), formData.get("active") === "1");
   revalidatePath("/shifts", "layout");
-  revalidatePath("/s/[token]", "page");
 }
 
 // ---- unavailability ----
@@ -137,7 +134,6 @@ export async function assignSlotAction(formData: FormData) {
     personId,
   );
   revalidatePath("/shifts", "layout");
-  revalidatePath("/s/[token]", "page");
 }
 
 export async function clearSlotAction(formData: FormData) {
@@ -150,7 +146,6 @@ export async function clearSlotAction(formData: FormData) {
     personId: requireId(formData.get("personId")),
   });
   revalidatePath("/shifts", "layout");
-  revalidatePath("/s/[token]", "page");
 }
 
 export async function setPublishedAction(formData: FormData) {
@@ -158,7 +153,6 @@ export async function setPublishedAction(formData: FormData) {
   const weekStart = requireDate(formData.get("weekStart"));
   await setWeekPublished(teamId, weekStart, formData.get("published") === "1");
   revalidatePath("/shifts", "layout");
-  revalidatePath("/s/[token]", "page");
 }
 
 export async function goToWeekAction(formData: FormData) {

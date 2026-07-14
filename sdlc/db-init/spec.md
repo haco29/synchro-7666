@@ -245,10 +245,9 @@ Derived from the existing SQLite schema, with `teams` added and `team_id` thread
 
 ## 8. Open Questions
 
-1. **`share_token` now redundant — keep or drop?** Since all viewers authenticate via Clerk, the
-   password-free share link no longer serves its original purpose. Options: (a) drop it entirely;
-   (b) keep it as an optional *unauthenticated* public read-only link for published weeks (nice for
-   sharing outside the org). Retained in schema for now; needs your call. *(Resolves old Q1/Q3.)*
+1. **`share_token` / public share link — RESOLVED: dropped.** Since all members authenticate via
+   Clerk, the POC public link was redundant. Removed the `/s/[token]` route, its queries, the proxy
+   public-route entry, and the `teams.share_token` column (migration `0001_brave_shaman.sql`).
 2. **How are Clerk orgs created?** Self-serve (a user creates their org/team on first sign-in) or
    admin-provisioned only? Affects onboarding and whether the app calls Clerk's org APIs.
 3. **Role mapping.** Confirm the two roles are Clerk's `org:admin` (editor) and default member

@@ -14,6 +14,8 @@ export default defineConfig({
     // `TURSO_DATABASE_URL` is env-driven; the file fallback is a non-secret
     // local default so `db:*` works out of the box (see .env.example).
     url: process.env.TURSO_DATABASE_URL ?? 'file:./data/dev.db',
-    authToken: process.env.TURSO_AUTH_TOKEN,
+    // Empty string (local file: URLs need no token) must become undefined —
+    // drizzle-kit's turso dialect rejects an empty authToken.
+    authToken: process.env.TURSO_AUTH_TOKEN || undefined,
   },
 })

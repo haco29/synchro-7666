@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createClient } from "@libsql/client";
 import { drizzle, type LibSQLDatabase } from "drizzle-orm/libsql";
 import { migrate } from "drizzle-orm/libsql/migrator";
-import { randomBytes } from "node:crypto";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -14,10 +13,7 @@ vi.mock("./index", () => ({ getDb: () => holder.db }));
 const q = await import("./queries");
 
 async function makeTeam(db: LibSQLDatabase<typeof schema>, name: string): Promise<number> {
-  const [team] = await db
-    .insert(schema.teams)
-    .values({ name, shareToken: randomBytes(16).toString("hex") })
-    .returning();
+  const [team] = await db.insert(schema.teams).values({ name }).returning();
   return team.id;
 }
 
@@ -231,22 +227,6 @@ describe("historyBefore", () => {
       { date: "2026-07-05", slot: "night", personId: zoe.id },
     ]);
     expect(await q.historyBefore(teamA, "2026-07-12")).toHaveLength(0);
-  });
-});
-
-describe("getShareToken", () => {
-  it("returns the team's own token, distinct per team", async () => {
-    const a = await q.getShareToken(teamA);
-    const b = await q.getShareToken(teamB);
-    expect(a).toMatch(/^[0-9a-f]{32}$/);
-    expect(a).not.toBe(b);
-    expect(await q.getShareToken(teamA)).toBe(a);
-  });
-
-  it("resolves a team id from its share token, or null when unknown", async () => {
-    const token = await q.getShareToken(teamA);
-    expect(await q.getTeamIdByShareToken(token)).toBe(teamA);
-    expect(await q.getTeamIdByShareToken("not-a-real-token")).toBeNull();
   });
 });
 

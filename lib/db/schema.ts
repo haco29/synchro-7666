@@ -10,9 +10,6 @@ export const teams = sqliteTable("teams", {
   name: text("name").notNull(),
   // Maps this team to its Clerk Organization. Nullable until linked (Task 5/8).
   clerkOrgId: text("clerk_org_id").unique(),
-  // Retained from the original single-tenant design; superseded by auth but
-  // kept as an optional public read-only link (spec Open Question #1).
-  shareToken: text("share_token").notNull().unique(),
 });
 
 export const people = sqliteTable(

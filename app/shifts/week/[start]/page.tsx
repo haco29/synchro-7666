@@ -6,7 +6,6 @@ import { SeatEditor } from "../../_components/seat-editor";
 import { WeekNav } from "../../_components/week-nav";
 import { currentTeam } from "@/lib/auth";
 import {
-  getShareToken,
   isWeekPublished,
   listAssignments,
   listConstraintsForWeek,
@@ -36,7 +35,6 @@ export default async function WeekPage({
   const constraints = await listConstraintsForWeek(teamId, weekStart);
   const violations = computeViolations(assignments, constraints, allPeople);
   const published = await isWeekPublished(teamId, weekStart);
-  const token = await getShareToken(teamId);
   const dates = weekDates(weekStart);
   const violationKeys = new Set(violations.map((v) => `${v.date}:${v.slot}:${v.personId}`));
 
@@ -89,15 +87,6 @@ export default async function WeekPage({
           </form>
         </div>
       </div>
-
-      {published && (
-        <p className="rounded border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-300">
-          Live for your team at{" "}
-          <a href={`/s/${token}`} className="font-mono underline">
-            /s/{token}
-          </a>
-        </p>
-      )}
 
       {people.length === 0 && (
         <p className="rounded border border-dashed border-neutral-300 p-6 text-center text-sm text-neutral-500 dark:border-neutral-700">

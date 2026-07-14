@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import { and, asc, eq, isNull } from "drizzle-orm";
 import type { LibSQLDatabase } from "drizzle-orm/libsql";
 import { auth } from "@clerk/nextjs/server";
@@ -62,7 +61,6 @@ export async function resolveTeamId(db: Db, orgId: string): Promise<number> {
     .values({
       name: `Team ${orgId}`,
       clerkOrgId: orgId,
-      shareToken: randomBytes(16).toString("hex"),
     })
     .onConflictDoNothing({ target: schema.teams.clerkOrgId })
     .returning({ id: schema.teams.id });
