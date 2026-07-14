@@ -101,6 +101,61 @@ export async function setPersonActive(
     .where(and(eq(people.id, id), eq(people.teamId, teamId)));
 }
 
+/** A person plus their Clerk link — for the admin roster/linking UI only. */
+export type PersonWithLink = Person & { clerkUserId: string | null };
+
+/** Full roster (incl. inactive) with each person's Clerk link, for admins. */
+export async function listPeopleWithUserLinks(teamId: number): Promise<PersonWithLink[]> {
+  return getDb()
+    .select({
+      id: people.id,
+      name: people.name,
+      active: people.active,
+      clerkUserId: people.clerkUserId,
+    })
+    .from(people)
+    .where(eq(people.teamId, teamId))
+    .orderBy(asc(people.name));
+}
+
+/**
+ * Link a team's person to a Clerk user (admin-set). Team-scoped: a person from
+ * another team is a no-op. `clerk_user_id` is globally unique, so we clear the
+ * id from any prior holder first — relinking a user moves the link
+ * (last-write-wins) rather than failing the unique constraint.
+ */
+export async function linkPersonToUser(
+  teamId: number,
+  personId: number,
+  clerkUserId: string,
+): Promise<void> {
+  const db = getDb();
+  const target = (
+    await db
+      .select({ id: people.id })
+      .from(people)
+      .where(and(eq(people.id, personId), eq(people.teamId, teamId)))
+      .limit(1)
+  )[0];
+  if (!target) return;
+
+  await db.transaction(async (tx) => {
+    await tx
+      .update(people)
+      .set({ clerkUserId: null })
+      .where(eq(people.clerkUserId, clerkUserId));
+    await tx.update(people).set({ clerkUserId }).where(eq(people.id, personId));
+  });
+}
+
+/** Clear a team's person's Clerk link. Team-scoped; foreign person is a no-op. */
+export async function unlinkPerson(teamId: number, personId: number): Promise<void> {
+  await getDb()
+    .update(people)
+    .set({ clerkUserId: null })
+    .where(and(eq(people.id, personId), eq(people.teamId, teamId)));
+}
+
 // ---- constraints (unavailable dates) ----
 
 export async function listConstraintsForWeek(

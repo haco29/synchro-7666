@@ -25,15 +25,13 @@
 - [ ] Hosted Turso migration deferred to Task 9 (deploy phase).
 
 ## Phase 2: Admin linking slice
-- [ ] **Task 2 (S):** Query functions in [`queries.ts`](../../lib/db/queries.ts): `linkPersonToUser(teamId, personId, clerkUserId)`, `unlinkPerson(teamId, personId)`; extend `listPeople` projection to include `clerkUserId` (for the admin grid). TDD in `queries.test.ts`.
-  - Tests: link sets the column (team-scoped — foreign `personId` is a no-op); unlink clears it; **relink** a user already linked to another person moves the link (last-write-wins, spec Q4); cross-team isolation.
-  - **Verify:** `pnpm test`, `tsc --noEmit`.
-- [ ] **Task 3 (S):** New server-only `lib/clerk/members.ts` wrapping `getOrganizationMembershipList` → `{ userId, label }[]`, using the shape learned in Task 0.
-  - **Acceptance:** returns the org's members for the caller's active org; server-only (no client import); one mockable export.
-  - **Verify:** `tsc --noEmit`; unit test with the Clerk client mocked returns mapped members.
-- [ ] **Task 4 (S):** `linkPersonAction` / `unlinkPersonAction` in [`actions.ts`](../../app/shifts/actions.ts) — `requireAdmin()`, validate `personId`/`clerkUserId`, call Task 2 queries, `revalidatePath`.
-  - Tests: admin links/unlinks; a **member** invoking these is rejected (`requireAdmin` throws); malformed input rejected.
-  - **Verify:** `pnpm test`, `tsc --noEmit`.
+- [x] **Task 2 (S):** Query functions in [`queries.ts`](../../lib/db/queries.ts) — **DONE**. Added `linkPersonToUser(teamId, personId, clerkUserId)` (team-scoped; transaction clears the id from any prior holder then sets it → relink = last-write-wins, satisfies global-unique), `unlinkPerson(teamId, personId)`, and a dedicated `listPeopleWithUserLinks(teamId)` returning `PersonWithLink = Person & { clerkUserId }`.
+  - **Design note (deviation from plan):** kept the shared `Person` domain type auth-free (used by the scheduler); added a **separate** `listPeopleWithUserLinks` instead of extending `listPeople`'s projection. Cleaner boundary.
+  - TDD: 4 tests in `queries.test.ts` (link surfaces in admin listing; unlink clears; relink moves link; foreign-team person is a no-op). **Verify:** ✅ 22 query tests; `tsc` clean.
+- [x] **Task 3 (S):** `lib/clerk/members.ts` — **DONE**. `listOrgMembers()` reads active org from `auth()`, calls `clerkClient().organizations.getOrganizationMembershipList({ organizationId, limit: 100 })`, maps to `{ userId, label }[]` (name || identifier), filters null `publicUserData`, returns `[]` when no active org.
+  - TDD: 5 tests (`members.test.ts`) with `auth`/`clerkClient` mocked — name label, identifier fallback, null-skip, no-org, correct params. **Verify:** ✅ 5 tests; `tsc` clean.
+- [x] **Task 4 (S):** `linkPersonAction` / `unlinkPersonAction` in [`actions.ts`](../../app/shifts/actions.ts) — **DONE**. Both `requireAdmin()`; link validates `personId` (`requireId`) + `clerkUserId` (new `requireNonEmpty`); call Task 2 queries; `revalidatePath`.
+  - TDD: new `app/shifts/actions.test.ts` (5 tests) — admin links/unlinks; **member rejected** on both; malformed input rejected. Added a temp-**file** DB (transaction gotcha) + `@/` alias to `vitest.config.ts` (Server Actions import via `@/lib/...`). **Verify:** ✅ full suite 71 green; `tsc` clean.
 - [ ] **Task 5 (M):** Admin People-page UI ([`people/page.tsx`](../../app/shifts/people/page.tsx)): per-person link control — dropdown of Task 3 members (showing current link), submitting Task 4 actions; "linked as …" indicator + unlink.
   - **Acceptance:** admin sees the member dropdown per person, can link and unlink, UI reflects the current `clerk_user_id`.
   - **Verify:** `pnpm dev` + browser — as admin, link a person to a Clerk member, reload, confirm persisted; unlink clears it. Screenshot.

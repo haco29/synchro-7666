@@ -7,6 +7,7 @@ import {
   addPerson,
   historyBefore,
   isWeekPublished,
+  linkPersonToUser,
   listConstraintsForWeek,
   listPeople,
   removeAssignment,
@@ -16,6 +17,7 @@ import {
   setUnavailable,
   setWeekPublished,
   swapSeat,
+  unlinkPerson,
 } from "@/lib/db/queries";
 import { generateWeek } from "@/lib/scheduler/generate";
 import type { SlotType } from "@/lib/shifts/types";
@@ -80,6 +82,29 @@ export async function renamePersonAction(formData: FormData) {
 export async function setPersonActiveAction(formData: FormData) {
   const { teamId } = await requireAdmin();
   await setPersonActive(teamId, requireId(formData.get("personId")), formData.get("active") === "1");
+  revalidatePath("/shifts", "layout");
+}
+
+// ---- person ↔ Clerk user linking (admin only) ----
+
+function requireNonEmpty(value: FormDataEntryValue | null, field: string): string {
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new Error(`Invalid ${field}: ${String(value)}`);
+  }
+  return value.trim();
+}
+
+export async function linkPersonAction(formData: FormData) {
+  const { teamId } = await requireAdmin();
+  const personId = requireId(formData.get("personId"));
+  const clerkUserId = requireNonEmpty(formData.get("clerkUserId"), "clerkUserId");
+  await linkPersonToUser(teamId, personId, clerkUserId);
+  revalidatePath("/shifts", "layout");
+}
+
+export async function unlinkPersonAction(formData: FormData) {
+  const { teamId } = await requireAdmin();
+  await unlinkPerson(teamId, requireId(formData.get("personId")));
   revalidatePath("/shifts", "layout");
 }
 
