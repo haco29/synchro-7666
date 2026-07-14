@@ -1,7 +1,6 @@
-import { timingSafeEqual } from "node:crypto";
 import { notFound } from "next/navigation";
 import {
-  getShareToken,
+  getTeamIdByShareToken,
   listAssignments,
   listPeople,
   listPublishedWeeks,
@@ -23,18 +22,22 @@ export default async function SharePage({
   searchParams: Promise<{ me?: string }>;
 }) {
   const { token } = await params;
-  const expected = Buffer.from(getShareToken());
-  const given = Buffer.from(token);
-  if (given.length !== expected.length || !timingSafeEqual(given, expected)) {
-    notFound();
-  }
+  // The token identifies the team; an unknown token is a 404.
+  const teamId = await getTeamIdByShareToken(token);
+  if (teamId === null) notFound();
   const { me } = await searchParams;
   const meId = Number(me) || null;
 
   // Most recent published weeks only, so the page doesn't grow forever.
-  const weeks = listPublishedWeeks().slice(0, 6);
-  const people = listPeople(true);
+  const weeks = (await listPublishedWeeks(teamId)).slice(0, 6);
+  const people = await listPeople(teamId, true);
   const nameOf = (id: number) => people.find((p) => p.id === id)?.name ?? `#${id}`;
+  // Pre-fetch each week's assignments (can't await inside the render map).
+  const weekAssignments = new Map(
+    await Promise.all(
+      weeks.map(async (w) => [w, await listAssignments(teamId, w)] as const),
+    ),
+  );
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-8">
@@ -71,7 +74,7 @@ export default async function SharePage({
 
       <div className="space-y-10">
         {weeks.map((weekStart) => {
-          const assignments = listAssignments(weekStart);
+          const assignments = weekAssignments.get(weekStart) ?? [];
           const forSeat = (date: string, slot: SlotType) =>
             assignments.filter((a) => a.date === date && a.slot === slot);
           return (

@@ -1,6 +1,7 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 
-const isPublicRoute = createRouteMatcher(["/sign-in(.*)", "/sign-up(.*)"]);
+// /s/<token> is the unauthenticated public share link (team resolved by token).
+const isPublicRoute = createRouteMatcher(["/sign-in(.*)", "/sign-up(.*)", "/s/(.*)"]);
 
 export default clerkMiddleware(async (auth, request) => {
   if (!isPublicRoute(request)) {

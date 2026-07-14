@@ -20,18 +20,19 @@
 
 ## Phase 2: Auth foundation
 - [x] Task 4: Clerk provider + `clerkMiddleware()` in `proxy.ts` gating + sign-in/up routes + env vars — **DONE** (via `clerk init`, app `app_3GU33O8SbW1WgIoTDgw0W3TcvEQ`). CLI scaffolded `proxy.ts` (Next 16 ✓, added `/__clerk/:path*` to matcher), `<ClerkProvider>` in `layout.tsx`, `app/sign-in|sign-up` catch-all routes; keys written to gitignored `.env.local`. Added global auth header (`<Show when=…>` + `UserButton`/`SignInButton`/`SignUpButton` — this Clerk 7.5 uses `Show`, not `SignedIn/Out`). `clerk doctor` green; `tsc` clean; 36 tests green. **Live-redirect check PASSED** (deferred from Task 0): unauth `/` → 307 `/sign-in`, `/sign-in` → 200, sign-in page renders, no console errors. NOTE: Clerk app uses phone-number sign-in.
-- [ ] Task 5: `lib/auth.ts` — `currentTeam()` (Clerk org → internal team_id) + `requireAdmin()`/`requireMember()`; auth tests
+- [x] Task 5: `lib/auth.ts` — `currentTeam()` (Clerk org → internal team_id) + `requireAdmin()`/`requireMember()`; auth tests — **DONE**. Pure `resolveTeamId(db, orgId)` (lookup → claim unlinked Default Team for first org → create for later orgs; idempotent, `clerk_org_id` unique). Thin `currentTeam()`/`requireMember()`/`requireAdmin()` wrappers read Clerk `auth()`; `AuthError` on unauth/no-org; `requireAdmin` needs `org:admin`. TDD: `lib/auth.test.ts` (11 tests: resolve/claim/create/isolation + guard matrix via stubbed `auth()` + in-memory db) RED→GREEN. Suite 47 green; `tsc` clean. (Dormant until routes wire it in Task 7.)
 
-## Checkpoint: Auth foundation
-- [ ] Sign-in gating works; `currentTeam()` maps org→team; role guards enforce editor vs viewer
+## Checkpoint: Auth foundation ✅
+- [x] Sign-in gating works (Task 4); `currentTeam()` maps org→team; role guards enforce editor vs viewer
 
 ## Phase 3: Vertical proof slice
-- [ ] Task 6: Rewrite `lib/db/queries.ts` (17 fns) → Drizzle, async, team-scoped; replace `lib/db/client.ts`; port `queries.test.ts` + isolation cases (L — split if needed)
-- [ ] Task 7: Wire the 5 existing DB consumers (`app/shifts/actions.ts`, week/people pages, fairness-panel, `app/s/[token]`) to async + `currentTeam()` + auth (L — split if needed)
+- [x] Task 6: Rewrite `lib/db/queries.ts` (17 fns) → Drizzle, async, team-scoped; replace `lib/db/client.ts`; port `queries.test.ts` + isolation cases — **DONE (tests green; tsc red until Task 7)**. All 17 fns now `async` + `teamId` first param; surrogate `week_id` resolved via `ensureWeekId`; transactions via `db.transaction`; `historyBefore` joins assignments→weeks; `getShareToken` reads `teams.share_token`. Behaviors preserved (reactivate-on-readd, OR-IGNORE rename via cause-chain unique check, atomic replace, swap no-op/stale-guard). Deleted `lib/db/client.ts` (node:sqlite). TDD: `queries.test.ts` rewritten to 17 async/two-team tests (+cross-team isolation) RED→GREEN. Suite **55 green** (scheduler/shifts regression guard intact). NOTE: queries.test uses a temp **file** DB (libSQL `:memory:` + `db.transaction` gotcha). **tsc RED on 5 consumers (66 errs) — Task 7 worklist**: week/[start] 19, actions.ts 16, s/[token] 15, fairness-panel 9, people 7.
+- [x] Task 7: Wire the 5 existing DB consumers to async + `currentTeam()` + auth — **DONE**. Server Actions (`actions.ts`) → `requireAdmin()` + `await`; `clearSlot` derives `sundayOf(date)`. Pages (`week/[start]`, `people`) + `fairness-panel` → `currentTeam()` + `await`. `/s/[token]` → public: new `getTeamIdByShareToken()` resolves team by token (added + tested), pre-fetch per-week assignments; `proxy.ts` public routes now include `/s/(.*)`. `tsc` CLEAN; suite **56 green**. Runtime verified: `/s/<token>` 200 renders 11 imported people + published week (no console errors), `/s/<bad>` 404, `/shifts` 307→/sign-in.
 
-## Checkpoint: Vertical slice
-- [ ] End-to-end locally via `/shifts`: sign in → view week → admin edits → persists; viewer blocked; `/s/[token]` renders; isolation holds
-- [ ] Regression guard: `lib/scheduler/*` + `lib/shifts/*` tests still green
+## Checkpoint: Vertical slice ✅ (authed-edit = user's final check)
+- [x] `/s/[token]` renders real data end-to-end; bad token 404; `/shifts` gated; cross-team isolation holds (unit-tested)
+- [x] Regression guard: `lib/scheduler/*` + `lib/shifts/*` tests still green
+- [ ] Human check: sign in → `/shifts` shows the 11 people → generate/edit/publish persists (couldn't self-verify — no browser session)
 
 ## Phase 4: Hosted provisioning + deploy
 - [ ] Task 8: Provision hosted Turso, set Vercel env (prod+preview), seed + link real Clerk org, deploy, verify real read/write

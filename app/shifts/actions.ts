@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { requireAdmin } from "@/lib/auth";
 import {
   addPerson,
   historyBefore,
@@ -63,21 +64,24 @@ function requireWeekDate(
 // ---- roster ----
 
 export async function addPersonAction(formData: FormData) {
+  const { teamId } = await requireAdmin();
   const name = String(formData.get("name") ?? "").trim();
-  if (name) addPerson(name);
+  if (name) await addPerson(teamId, name);
   revalidatePath("/shifts", "layout");
 }
 
 export async function renamePersonAction(formData: FormData) {
+  const { teamId } = await requireAdmin();
   const name = String(formData.get("name") ?? "").trim();
-  if (name) renamePerson(requireId(formData.get("personId")), name);
+  if (name) await renamePerson(teamId, requireId(formData.get("personId")), name);
   revalidatePath("/shifts", "layout");
   // A renamed/deactivated person changes what the published share page shows.
   revalidatePath("/s/[token]", "page");
 }
 
 export async function setPersonActiveAction(formData: FormData) {
-  setPersonActive(requireId(formData.get("personId")), formData.get("active") === "1");
+  const { teamId } = await requireAdmin();
+  await setPersonActive(teamId, requireId(formData.get("personId")), formData.get("active") === "1");
   revalidatePath("/shifts", "layout");
   revalidatePath("/s/[token]", "page");
 }
@@ -85,7 +89,9 @@ export async function setPersonActiveAction(formData: FormData) {
 // ---- unavailability ----
 
 export async function toggleUnavailableAction(formData: FormData) {
-  setUnavailable(
+  const { teamId } = await requireAdmin();
+  await setUnavailable(
+    teamId,
     requireId(formData.get("personId")),
     requireDate(formData.get("date")),
     formData.get("unavailable") === "1",
@@ -96,23 +102,25 @@ export async function toggleUnavailableAction(formData: FormData) {
 // ---- schedule ----
 
 export async function generateWeekAction(formData: FormData) {
+  const { teamId } = await requireAdmin();
   const weekStart = requireDate(formData.get("weekStart"));
   // Never regenerate a live schedule out from under viewers (and manual
   // tweaks); the UI disables the button, this guards direct POSTs.
-  if (isWeekPublished(weekStart)) return;
+  if (await isWeekPublished(teamId, weekStart)) return;
   const seed = Date.now() % 2 ** 31;
   const result = generateWeek({
     weekStart,
-    people: listPeople(),
-    constraints: listConstraintsForWeek(weekStart),
-    history: historyBefore(weekStart),
+    people: await listPeople(teamId),
+    constraints: await listConstraintsForWeek(teamId, weekStart),
+    history: await historyBefore(teamId, weekStart),
     seed,
   });
-  replaceWeekAssignments(weekStart, result.assignments);
+  await replaceWeekAssignments(teamId, weekStart, result.assignments);
   revalidatePath("/shifts", "layout");
 }
 
 export async function assignSlotAction(formData: FormData) {
+  const { teamId } = await requireAdmin();
   const { weekStart, date } = requireWeekDate(
     formData.get("weekStart"),
     formData.get("date"),
@@ -120,7 +128,8 @@ export async function assignSlotAction(formData: FormData) {
   const slot = requireSlot(formData.get("slot"));
   const personId = requireId(formData.get("personId"));
   const previousId = Number(formData.get("previousPersonId"));
-  swapSeat(
+  await swapSeat(
+    teamId,
     weekStart,
     date,
     slot,
@@ -132,16 +141,22 @@ export async function assignSlotAction(formData: FormData) {
 }
 
 export async function clearSlotAction(formData: FormData) {
+  const { teamId } = await requireAdmin();
   const date = requireDate(formData.get("date"));
   const slot = requireSlot(formData.get("slot"));
-  removeAssignment({ date, slot, personId: requireId(formData.get("personId")) });
+  await removeAssignment(teamId, sundayOf(date), {
+    date,
+    slot,
+    personId: requireId(formData.get("personId")),
+  });
   revalidatePath("/shifts", "layout");
   revalidatePath("/s/[token]", "page");
 }
 
 export async function setPublishedAction(formData: FormData) {
+  const { teamId } = await requireAdmin();
   const weekStart = requireDate(formData.get("weekStart"));
-  setWeekPublished(weekStart, formData.get("published") === "1");
+  await setWeekPublished(teamId, weekStart, formData.get("published") === "1");
   revalidatePath("/shifts", "layout");
   revalidatePath("/s/[token]", "page");
 }

@@ -4,6 +4,7 @@ import { generateWeekAction, setPublishedAction } from "../../actions";
 import { FairnessPanel } from "../../_components/fairness-panel";
 import { SeatEditor } from "../../_components/seat-editor";
 import { WeekNav } from "../../_components/week-nav";
+import { currentTeam } from "@/lib/auth";
 import {
   getShareToken,
   isWeekPublished,
@@ -28,13 +29,14 @@ export default async function WeekPage({
   const weekStart = sundayOf(start);
   // Canonicalize so each week has exactly one URL.
   if (start !== weekStart) redirect(`/shifts/week/${weekStart}`);
-  const allPeople = listPeople(true);
+  const teamId = await currentTeam();
+  const allPeople = await listPeople(teamId, true);
   const people = allPeople.filter((p) => p.active);
-  const assignments = listAssignments(weekStart);
-  const constraints = listConstraintsForWeek(weekStart);
+  const assignments = await listAssignments(teamId, weekStart);
+  const constraints = await listConstraintsForWeek(teamId, weekStart);
   const violations = computeViolations(assignments, constraints, allPeople);
-  const published = isWeekPublished(weekStart);
-  const token = getShareToken();
+  const published = await isWeekPublished(teamId, weekStart);
+  const token = await getShareToken(teamId);
   const dates = weekDates(weekStart);
   const violationKeys = new Set(violations.map((v) => `${v.date}:${v.slot}:${v.personId}`));
 
@@ -168,7 +170,9 @@ export default async function WeekPage({
         </table>
       </div>
 
-      {people.length > 0 && <FairnessPanel weekStart={weekStart} people={people} />}
+      {people.length > 0 && (
+        <FairnessPanel teamId={teamId} weekStart={weekStart} people={people} />
+      )}
     </div>
   );
 }

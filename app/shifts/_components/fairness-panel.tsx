@@ -3,16 +3,18 @@ import type { Person, SlotType } from "@/lib/shifts/types";
 import { addDays } from "@/lib/shifts/week";
 
 /** Per-person load: this week's counts plus all-time nights/kitchens. */
-export function FairnessPanel({
+export async function FairnessPanel({
+  teamId,
   weekStart,
   people,
 }: {
+  teamId: number;
   weekStart: string;
   people: Person[];
 }) {
-  const week = listAssignments(weekStart);
+  const week = await listAssignments(teamId, weekStart);
   const allTime = new Map(
-    historyBefore(addDays(weekStart, 7)).map((h) => [h.personId, h]),
+    (await historyBefore(teamId, addDays(weekStart, 7))).map((h) => [h.personId, h]),
   );
   const weekCount = (id: number, slot?: SlotType) =>
     week.filter((a) => a.personId === id && (slot ? a.slot === slot : true)).length;
