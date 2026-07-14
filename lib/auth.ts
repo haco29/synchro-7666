@@ -2,6 +2,7 @@ import { and, asc, eq, isNull } from "drizzle-orm";
 import type { LibSQLDatabase } from "drizzle-orm/libsql";
 import { auth } from "@clerk/nextjs/server";
 import { getDb } from "./db/index";
+import { personForUser } from "./db/queries";
 import * as schema from "./db/schema";
 
 /** Thrown when a request is not authorized. Callers/route handlers surface a 401/403. */
@@ -98,4 +99,41 @@ export async function requireAdmin(): Promise<{ teamId: number }> {
   const { orgId, orgRole } = await requireOrg();
   if (orgRole !== "org:admin") throw new AuthError("Requires admin role");
   return { teamId: await resolveTeamId(getDb(), orgId) };
+}
+
+/**
+ * Whether the caller is an org admin (editor). For role-aware *rendering* in
+ * Server Components — it does not authorize a mutation (that stays
+ * `requireAdmin()` inside the action). Throws only when unauthenticated / no org,
+ * consistent with `currentTeam()`.
+ */
+export async function isAdmin(): Promise<boolean> {
+  const { orgRole } = await requireOrg();
+  return orgRole === "org:admin";
+}
+
+/**
+ * The `people.id` linked to the caller's Clerk user in their active team, or
+ * null if this member isn't linked to a person yet. For role-aware *rendering*
+ * (an unlinked member is read-only). Derives the person server-side — the client
+ * never supplies it.
+ */
+export async function currentPersonId(): Promise<number | null> {
+  const { userId, orgId } = await requireOrg();
+  const teamId = await resolveTeamId(getDb(), orgId);
+  return (await personForUser(teamId, userId)) ?? null;
+}
+
+/**
+ * A signed-in member who is linked to a person. Returns their team + own person
+ * id. Throws AuthError if unauthenticated, without an org, or not yet linked.
+ * Use in the self-service availability action to authorize *and* to source the
+ * caller's own `personId` — never trust a `personId` from the form.
+ */
+export async function requireLinkedMember(): Promise<{ teamId: number; personId: number }> {
+  const { userId, orgId } = await requireOrg();
+  const teamId = await resolveTeamId(getDb(), orgId);
+  const personId = await personForUser(teamId, userId);
+  if (personId === undefined) throw new AuthError("No linked person for this member");
+  return { teamId, personId };
 }

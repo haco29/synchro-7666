@@ -32,32 +32,35 @@
   - TDD: 5 tests (`members.test.ts`) with `auth`/`clerkClient` mocked — name label, identifier fallback, null-skip, no-org, correct params. **Verify:** ✅ 5 tests; `tsc` clean.
 - [x] **Task 4 (S):** `linkPersonAction` / `unlinkPersonAction` in [`actions.ts`](../../app/shifts/actions.ts) — **DONE**. Both `requireAdmin()`; link validates `personId` (`requireId`) + `clerkUserId` (new `requireNonEmpty`); call Task 2 queries; `revalidatePath`.
   - TDD: new `app/shifts/actions.test.ts` (5 tests) — admin links/unlinks; **member rejected** on both; malformed input rejected. Added a temp-**file** DB (transaction gotcha) + `@/` alias to `vitest.config.ts` (Server Actions import via `@/lib/...`). **Verify:** ✅ full suite 71 green; `tsc` clean.
-- [ ] **Task 5 (M):** Admin People-page UI ([`people/page.tsx`](../../app/shifts/people/page.tsx)): per-person link control — dropdown of Task 3 members (showing current link), submitting Task 4 actions; "linked as …" indicator + unlink.
-  - **Acceptance:** admin sees the member dropdown per person, can link and unlink, UI reflects the current `clerk_user_id`.
-  - **Verify:** `pnpm dev` + browser — as admin, link a person to a Clerk member, reload, confirm persisted; unlink clears it. Screenshot.
+- [x] **Task 5 (M):** Admin People-page UI ([`people/page.tsx`](../../app/shifts/people/page.tsx)) — **DONE**. Added an admin-only "Linked account" column: per-person `<select>` of `listOrgMembers()` (defaulting to the current link) + "Link" (→ `linkPersonAction`), and an "Unlink" button when linked (→ `unlinkPersonAction`). A prior link to someone no longer in the org still shows ("… (not in org)"). Page now sources `listPeopleWithUserLinks(teamId)`; link UI gated on new `isAdmin()`.
+  - **Added `isAdmin()` to [`lib/auth.ts`](../../lib/auth.ts)** (non-throwing role check for role-aware *rendering*; authz still `requireAdmin()` in the action) + 2 TDD tests in `auth.test.ts`.
+  - **Acceptance:** ✅ admin sees the dropdown per person, can link/unlink, UI reflects current `clerk_user_id`; non-admins see no link column.
+  - **Verify:** ✅ `pnpm build` compiles `/shifts/people` as `ƒ (Dynamic)`; `tsc` clean; suite 73 green. ⚠️ Interactive click-through deferred to human check — in-app browser blocks `localhost` and dev Clerk needs phone/email OTP (same limitation as db-init authed checks).
 
-## Checkpoint: Admin linking works ✅
-- [ ] Admin can link/unlink a person ↔ Clerk member end-to-end; member cannot invoke link actions; isolation + relink covered by tests. **(Clean PR-A boundary.)**
+## Checkpoint: Admin linking works ✅ (build-verified; interactive = human check)
+- [x] Admin can link/unlink a person ↔ Clerk member (queries + actions tested end-to-end; page build-verified); member cannot invoke link actions (`requireAdmin` — tested); isolation + relink covered by tests. **(Clean PR-A boundary.)**
+- [ ] Human check: sign in as admin → /shifts/people → link a person to a member, reload persists, unlink clears.
 
 ## Phase 3: Member self-service slice
-- [ ] **Task 6 (S):** `personForUser(teamId, clerkUserId)` query + `currentPersonId()` / `requireLinkedMember()` in [`lib/auth.ts`](../../lib/auth.ts) (resolve caller's linked `people.id` from `auth().userId` + `currentTeam()`). TDD in `auth.test.ts` + `queries.test.ts`.
-  - Tests: resolves the linked person; returns none/throws for an unlinked member; team-scoped (a `userId` linked in team A never resolves in team B).
-  - **Verify:** `pnpm test`, `tsc --noEmit`.
-- [ ] **Task 7 (S):** `toggleMyUnavailabilityAction` in [`actions.ts`](../../app/shifts/actions.ts) — `requireMember()`, resolve own person via `currentPersonId()`, **reject if the form `personId` ≠ resolved own person**, then reuse `setUnavailable()`. TDD.
-  - Tests: linked member toggles own date (success); same member submitting a **different** `personId` is **rejected**; unlinked member is refused; adding unavailability on an assigned date leaves the assignment intact (D4 — assert `computeViolations` warns, row unchanged).
-  - **Verify:** `pnpm test`, `tsc --noEmit`.
-- [ ] **Task 8 (M):** Role-aware People page ([`people/page.tsx`](../../app/shifts/people/page.tsx)): a **member** sees only their own linked row with unavailability toggles wired to Task 7; **unlinked** member sees read-only (no editable row); **admin** sees the full grid unchanged. Inactive linked member follows existing disabled-toggle behavior (spec Q2 leaning).
-  - **Acceptance:** member view scoped to own row; unlinked = read-only; admin unchanged.
-  - **Verify:** `pnpm dev` + browser — sign in as a linked member, toggle own availability, confirm it appears in the week's violations; confirm no other rows are editable. Screenshot both member and admin views.
+- [x] **Task 6 (S):** `personForUser` + auth resolvers — **DONE**. `personForUser(teamId, clerkUserId)` in [`queries.ts`](../../lib/db/queries.ts) (team-scoped, returns `id | undefined`). `currentPersonId(): number | null` (for rendering) and `requireLinkedMember(): { teamId, personId }` (throws if unlinked) in [`lib/auth.ts`](../../lib/auth.ts), both deriving the person server-side from `auth().userId` + `resolveTeamId`.
+  - TDD: 1 query test (resolves / undefined for unlinked / not across teams) + 5 auth tests (currentPersonId linked→id, unlinked→null; requireLinkedMember linked→{team,person}, unlinked→throw, signed-out→throw). **Verify:** ✅ 79 suite green; `tsc` clean. (No import cycle: queries.ts doesn't import auth.ts.)
+- [x] **Task 7 (S):** `toggleMyUnavailabilityAction` — **DONE** ([`actions.ts`](../../app/shifts/actions.ts)). `requireLinkedMember()` sources the caller's own `personId`; **rejects when the form `personId` ≠ the resolved own person**; then reuses `setUnavailable()`.
+  - TDD (in `actions.test.ts`): linked member toggles own date ✅; **spoofed `personId` → rejected, no write** ✅; unlinked member → refused ✅; marking unavailable on an assigned date leaves the assignment intact and `computeViolations` warns (D4) ✅. **Verify:** ✅ full suite 83 green; `tsc` clean.
+- [x] **Task 8 (M):** Role-aware People page — **DONE** ([`people/page.tsx`](../../app/shifts/people/page.tsx)). Restructured into `AdminView` (unchanged full grid + linking) and `MemberView` (own row only → `toggleMyUnavailabilityAction`; unlinked → "ask an admin to link you" notice, read-only). Extracted a shared `UnavailabilityToggle` (action injected) so admin and member reuse one control; inactive person keeps the disabled-toggle behavior (spec Q2).
+  - **Acceptance:** ✅ member view scoped to own row; unlinked = read-only notice; admin unchanged. Other people's constraint data stays server-side (only the member's own cells render).
+  - **Verify:** ✅ `pnpm build` compiles `/shifts/people` (`ƒ Dynamic`); `tsc` clean; suite 83 green. ⚠️ Interactive member/admin click-through = human check (localhost blocked in-app + dev Clerk OTP).
 
-## Checkpoint: Member self-service works ✅
-- [ ] Linked member edits only their own availability (spoofed `personId` rejected by the action); unlinked member read-only; admin unchanged; regression suite green. **(PR-B boundary.)**
+## Checkpoint: Member self-service works ✅ (build-verified; interactive = human check)
+- [x] Linked member edits only their own availability; **spoofed `personId` rejected by the action** (tested); unlinked member read-only; admin unchanged; regression suite green (83). **(PR-B boundary.)**
+- [ ] Human check: sign in as a linked member → /shifts/people → toggle own availability, see it in the week's violations; confirm no other rows editable.
 
 ## Phase 4: Docs + deploy
-- [ ] **Task 9 (S):** Write [`docs/decisions/0003-member-self-availability.md`](../../docs/decisions/0003-member-self-availability.md) (amends ADR-0002 — first identity↔subject link + first `requireMember()` write). Update [`architecture.md`](../../docs/architecture.md) invariant nuances ("No `users` table" + `requireMember()` lines). Apply the Task 1 migration to **hosted Turso** (`pnpm db:migrate`); deploy; verify link + member-toggle on the deployed app.
-  - **Acceptance:** ADR + doc updates committed; hosted DB migrated; deployed app exercises both flows.
-  - **Verify:** hosted `db:migrate` clean; browser check on `synchro-7666.vercel.app`.
+- [x] **Task 9 — docs (DONE):** Wrote [`0003-member-self-availability.md`](../../docs/decisions/0003-member-self-availability.md) (records the admin-set `people.clerk_user_id` link, the first `requireMember()` write, alternatives rejected: email-match / self-claim). Updated [`architecture.md`](../../docs/architecture.md) three nuances ("No `users` table" now notes the optional link; `requireMember()` read-only exception; `lib/auth.ts` gains `requireLinkedMember()`/`currentPersonId()`). Added an "amended in part by ADR-0003" pointer to [ADR-0002](../../docs/decisions/0002-auth-clerk-org-multitenancy.md).
+- [ ] **Task 9 — deploy (USER, touches production):** Apply the `clerk_user_id` migration to **hosted Turso** (`pnpm db:migrate` against the hosted URL), deploy, and verify link + member-toggle on `synchro-7666.vercel.app`.
+  - **Verify:** hosted `db:migrate` clean; browser check as admin (link a member) then as that member (toggle own availability).
 
-## Checkpoint: Complete
-- [ ] Both flows work on the deployed app under Clerk auth; docs/ADR landed; full suite green.
+## Checkpoint: Complete (code + docs done; deploy + human checks pending)
+- [x] Both flows implemented, tested (83 green), build-verified; docs/ADR landed.
+- [ ] Deploy: hosted Turso migrated + deployed (USER).
+- [ ] Human checks: admin link flow; member self-toggle flow.
 - [ ] Ready for /test and /review.

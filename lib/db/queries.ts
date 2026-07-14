@@ -156,6 +156,25 @@ export async function unlinkPerson(teamId: number, personId: number): Promise<vo
     .where(and(eq(people.id, personId), eq(people.teamId, teamId)));
 }
 
+/**
+ * The team's person linked to a Clerk user, or undefined if none. Team-scoped:
+ * a link resolves only within its own team. This is how a member's own person is
+ * derived server-side (see lib/auth.ts) — never from client input.
+ */
+export async function personForUser(
+  teamId: number,
+  clerkUserId: string,
+): Promise<number | undefined> {
+  const row = (
+    await getDb()
+      .select({ id: people.id })
+      .from(people)
+      .where(and(eq(people.teamId, teamId), eq(people.clerkUserId, clerkUserId)))
+      .limit(1)
+  )[0];
+  return row?.id;
+}
+
 // ---- constraints (unavailable dates) ----
 
 export async function listConstraintsForWeek(

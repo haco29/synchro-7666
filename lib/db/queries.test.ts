@@ -115,6 +115,18 @@ describe("linking people to Clerk users", () => {
     const p = (await q.listPeopleWithUserLinks(teamB)).find((x) => x.id === bella.id)!;
     expect(p.clerkUserId).toBeNull();
   });
+
+  it("resolves a clerk user to their linked person, scoped to the team", async () => {
+    await q.addPerson(teamA, "Alice");
+    const alice = (await q.listPeople(teamA))[0];
+    await q.linkPersonToUser(teamA, alice.id, "user_1");
+
+    expect(await q.personForUser(teamA, "user_1")).toBe(alice.id);
+    // Unlinked user in the team → undefined.
+    expect(await q.personForUser(teamA, "user_x")).toBeUndefined();
+    // The link does not resolve under another team.
+    expect(await q.personForUser(teamB, "user_1")).toBeUndefined();
+  });
 });
 
 describe("constraints (unavailable dates)", () => {

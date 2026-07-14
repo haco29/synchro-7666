@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdmin, requireLinkedMember } from "@/lib/auth";
 import {
   addPerson,
   historyBefore,
@@ -115,6 +115,26 @@ export async function toggleUnavailableAction(formData: FormData) {
   await setUnavailable(
     teamId,
     requireId(formData.get("personId")),
+    requireDate(formData.get("date")),
+    formData.get("unavailable") === "1",
+  );
+  revalidatePath("/shifts", "layout");
+}
+
+/**
+ * A member toggling *their own* unavailability. The caller's person is resolved
+ * server-side from their Clerk identity (`requireLinkedMember`); the form's
+ * `personId` is only accepted if it matches — a spoofed id is rejected, never
+ * trusted. Unlinked members are refused (requireLinkedMember throws).
+ */
+export async function toggleMyUnavailabilityAction(formData: FormData) {
+  const { teamId, personId } = await requireLinkedMember();
+  if (requireId(formData.get("personId")) !== personId) {
+    throw new Error("Cannot edit another person's availability");
+  }
+  await setUnavailable(
+    teamId,
+    personId,
     requireDate(formData.get("date")),
     formData.get("unavailable") === "1",
   );

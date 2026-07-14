@@ -91,7 +91,7 @@ deploy (Phase 4) folded into whichever lands last. Recommend one PR unless revie
 ## SDLC Command Coverage
 - [x] /spec completed
 - [x] /plan completed
-- [ ] /build in progress (Task 0 ✅ de-risk PASS; Task 1 next)
+- [x] /build completed (Tasks 0–8 + Task 9 docs; hosted migrate + deploy pending user — touches production)
 - [ ] /test
 - [ ] /review
 - [ ] /code-simplify
