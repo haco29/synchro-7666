@@ -19,7 +19,7 @@
 - [x] Local DB migrates + seeds; schema matches spec; `pnpm db:*` scripts work; tests green (36)
 
 ## Phase 2: Auth foundation
-- [ ] Task 4: Clerk provider + `clerkMiddleware()` in **`proxy.ts`** (Next 16 convention, Node runtime) gating + sign-in/up routes + env vars; first run the deferred live-redirect check with Clerk keys
+- [x] Task 4: Clerk provider + `clerkMiddleware()` in `proxy.ts` gating + sign-in/up routes + env vars — **DONE** (via `clerk init`, app `app_3GU33O8SbW1WgIoTDgw0W3TcvEQ`). CLI scaffolded `proxy.ts` (Next 16 ✓, added `/__clerk/:path*` to matcher), `<ClerkProvider>` in `layout.tsx`, `app/sign-in|sign-up` catch-all routes; keys written to gitignored `.env.local`. Added global auth header (`<Show when=…>` + `UserButton`/`SignInButton`/`SignUpButton` — this Clerk 7.5 uses `Show`, not `SignedIn/Out`). `clerk doctor` green; `tsc` clean; 36 tests green. **Live-redirect check PASSED** (deferred from Task 0): unauth `/` → 307 `/sign-in`, `/sign-in` → 200, sign-in page renders, no console errors. NOTE: Clerk app uses phone-number sign-in.
 - [ ] Task 5: `lib/auth.ts` — `currentTeam()` (Clerk org → internal team_id) + `requireAdmin()`/`requireMember()`; auth tests
 
 ## Checkpoint: Auth foundation
