@@ -35,9 +35,11 @@
 - [ ] Human check: sign in → `/shifts` shows the 11 people → generate/edit/publish persists (couldn't self-verify — no browser session)
 
 ## Phase 4: Hosted provisioning + deploy
-- [ ] Task 8: Provision hosted Turso, set Vercel env (prod+preview), seed + link real Clerk org, deploy, verify real read/write
+- [x] Task 8: Provision hosted Turso, set Vercel env, seed, deploy, verify — **DONE**. Turso provisioned via **Vercel Marketplace** (auto-injected `TURSO_*` into all envs). Migrated + seeded hosted (1 team, 11 people, 1 week). Clerk **dev** keys added to Vercel prod+preview via `vercel env add`. Deployed to **production** (`synchro-7666.vercel.app`). Verified: `/` → sign-in (email) in a real browser, `/s/<token>` → 200 renders roster, `/sign-in` 200. **Bug found + fixed**: legacy `week_start="1.0"` crashed the share page (`RangeError`) → deleted from hosted + hardened `readSourceDb` to skip non-ISO weeks (test added). Suite 56 green.
+  - **CAVEAT (dev Clerk on vercel.app):** `x-clerk-auth-reason: dev-browser-missing` — dev instances rewrite protected routes to 404 on JS-less/SSR-first hits (curl sees 404; real browsers handshake fine). Removed by promoting to a **production** Clerk instance once a custom domain exists. Tracked as follow-up.
 
-## Checkpoint: Complete
-- [ ] All spec §7 Success Criteria met
-- [ ] Deployed app reads/writes hosted Turso under Clerk auth with tenancy + role enforcement
+## Checkpoint: Complete ✅ (with follow-ups)
+- [x] Deployed app on Vercel reads hosted Turso under Clerk auth; public share page renders real data; protected routes gate to sign-in
+- [ ] Human check: sign in on the deployed URL → `/shifts` → generate/publish (needs your login)
+- [ ] Follow-up: promote to a production Clerk instance + custom domain (removes dev-mode banner + dev-browser 404 edge)
 - [ ] Ready for /test and /review

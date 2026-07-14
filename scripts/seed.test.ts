@@ -70,6 +70,7 @@ describe("seed", () => {
     legacy.prepare("INSERT INTO people (name, active) VALUES (?, ?)").run("Noa", 0);
     legacy.prepare("INSERT INTO settings VALUES ('share_token', 'abc')").run();
     legacy.prepare("INSERT INTO weeks VALUES ('2026-07-19', 1)").run();
+    legacy.prepare("INSERT INTO weeks VALUES ('1.0', 1)").run(); // legacy garbage
     legacy.close();
 
     const source = readSourceDb(dbPath);
@@ -80,6 +81,7 @@ describe("seed", () => {
       { name: "Dana", active: true },
       { name: "Noa", active: false },
     ]);
+    // The bogus "1.0" week is skipped; only the valid ISO week survives.
     expect(source.weeks).toEqual([{ weekStart: "2026-07-19", published: true }]);
   });
 });

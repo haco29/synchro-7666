@@ -8,6 +8,7 @@ import { migrate } from "drizzle-orm/libsql/migrator";
 // Standalone migration script — builds its own client rather than importing the
 // app's lib/db/index.ts singleton (keeps this runnable via `node scripts/seed.ts`).
 import * as schema from "../lib/db/schema.ts";
+import { isIsoDate } from "../lib/shifts/week.ts";
 
 export const DEFAULT_TEAM_NAME = "Default Team";
 
@@ -42,7 +43,12 @@ export function readSourceDb(dbPath: string): SeedSource {
         week_start: string;
         published: number;
       }[]
-    ).map((r) => ({ weekStart: r.week_start, published: !!r.published }));
+    )
+      // Skip legacy garbage rows (e.g. week_start "1.0") that would crash date
+      // formatting downstream. The current app validates dates on write, but
+      // the pre-migration node:sqlite data may contain bad values.
+      .filter((r) => isIsoDate(r.week_start))
+      .map((r) => ({ weekStart: r.week_start, published: !!r.published }));
 
     return { shareToken: tokenRow?.value ?? null, people, weeks };
   } finally {
