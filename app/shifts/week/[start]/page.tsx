@@ -4,8 +4,8 @@ import { generateWeekAction, setPublishedAction } from "../../actions";
 import { FairnessPanel } from "../../_components/fairness-panel";
 import { SeatEditor } from "../../_components/seat-editor";
 import { WeekNav } from "../../_components/week-nav";
+import { currentTeam } from "@/lib/auth";
 import {
-  getShareToken,
   isWeekPublished,
   listAssignments,
   listConstraintsForWeek,
@@ -28,13 +28,13 @@ export default async function WeekPage({
   const weekStart = sundayOf(start);
   // Canonicalize so each week has exactly one URL.
   if (start !== weekStart) redirect(`/shifts/week/${weekStart}`);
-  const allPeople = listPeople(true);
+  const teamId = await currentTeam();
+  const allPeople = await listPeople(teamId, true);
   const people = allPeople.filter((p) => p.active);
-  const assignments = listAssignments(weekStart);
-  const constraints = listConstraintsForWeek(weekStart);
+  const assignments = await listAssignments(teamId, weekStart);
+  const constraints = await listConstraintsForWeek(teamId, weekStart);
   const violations = computeViolations(assignments, constraints, allPeople);
-  const published = isWeekPublished(weekStart);
-  const token = getShareToken();
+  const published = await isWeekPublished(teamId, weekStart);
   const dates = weekDates(weekStart);
   const violationKeys = new Set(violations.map((v) => `${v.date}:${v.slot}:${v.personId}`));
 
@@ -87,15 +87,6 @@ export default async function WeekPage({
           </form>
         </div>
       </div>
-
-      {published && (
-        <p className="rounded border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-300">
-          Live for your team at{" "}
-          <a href={`/s/${token}`} className="font-mono underline">
-            /s/{token}
-          </a>
-        </p>
-      )}
 
       {people.length === 0 && (
         <p className="rounded border border-dashed border-neutral-300 p-6 text-center text-sm text-neutral-500 dark:border-neutral-700">
@@ -168,7 +159,9 @@ export default async function WeekPage({
         </table>
       </div>
 
-      {people.length > 0 && <FairnessPanel weekStart={weekStart} people={people} />}
+      {people.length > 0 && (
+        <FairnessPanel teamId={teamId} weekStart={weekStart} people={people} />
+      )}
     </div>
   );
 }

@@ -4,6 +4,7 @@ import {
   toggleUnavailableAction,
 } from "../actions";
 import { WeekNav } from "../_components/week-nav";
+import { currentTeam } from "@/lib/auth";
 import { listConstraintsForWeek, listPeople } from "@/lib/db/queries";
 import { addDays, dayLabel, isIsoDate, sundayOf, todayIso, weekDates } from "@/lib/shifts/week";
 
@@ -17,8 +18,9 @@ export default async function PeoplePage({
   const { week } = await searchParams;
   const weekStart =
     week && isIsoDate(week) ? sundayOf(week) : addDays(sundayOf(todayIso()), 7);
-  const people = listPeople(true);
-  const constraints = listConstraintsForWeek(weekStart);
+  const teamId = await currentTeam();
+  const people = await listPeople(teamId, true);
+  const constraints = await listConstraintsForWeek(teamId, weekStart);
   const unavailable = new Set(constraints.map((c) => `${c.value}:${c.personId}`));
   const dates = weekDates(weekStart);
 
