@@ -14,6 +14,14 @@ export class AuthError extends Error {
 
 type Db = LibSQLDatabase<typeof schema>;
 
+/** The internal team id linked to a Clerk org, or undefined if none is linked yet. */
+async function findTeamByOrg(db: Db, orgId: string): Promise<number | undefined> {
+  const row = (
+    await db.select({ id: schema.teams.id }).from(schema.teams).where(eq(schema.teams.clerkOrgId, orgId)).limit(1)
+  )[0];
+  return row?.id;
+}
+
 /**
  * Maps a Clerk organization id to our internal team id — the single place
  * tenancy is derived. Pure over (db, orgId) so it is unit-testable without Clerk.
@@ -23,10 +31,8 @@ type Db = LibSQLDatabase<typeof schema>;
  * unique, so a given org always maps to exactly one team.
  */
 export async function resolveTeamId(db: Db, orgId: string): Promise<number> {
-  const existing = (
-    await db.select({ id: schema.teams.id }).from(schema.teams).where(eq(schema.teams.clerkOrgId, orgId)).limit(1)
-  )[0];
-  if (existing) return existing.id;
+  const existing = await findTeamByOrg(db, orgId);
+  if (existing !== undefined) return existing;
 
   // First org to migrate claims the seeded, still-unlinked "Default Team" so its
   // roster carries over. The conditional update (WHERE clerk_org_id IS NULL) makes
@@ -47,10 +53,8 @@ export async function resolveTeamId(db: Db, orgId: string): Promise<number> {
       .returning({ id: schema.teams.id });
     if (claimed.length > 0) return claimed[0].id;
     // Lost the claim race — see if this org got linked meanwhile.
-    const linked = (
-      await db.select({ id: schema.teams.id }).from(schema.teams).where(eq(schema.teams.clerkOrgId, orgId)).limit(1)
-    )[0];
-    if (linked) return linked.id;
+    const linked = await findTeamByOrg(db, orgId);
+    if (linked !== undefined) return linked;
     // else fall through and create a fresh team.
   }
 
@@ -58,16 +62,11 @@ export async function resolveTeamId(db: Db, orgId: string): Promise<number> {
   // (clerk_org_id is UNIQUE) by reading the winner.
   const created = await db
     .insert(schema.teams)
-    .values({
-      name: `Team ${orgId}`,
-      clerkOrgId: orgId,
-    })
+    .values({ name: `Team ${orgId}`, clerkOrgId: orgId })
     .onConflictDoNothing({ target: schema.teams.clerkOrgId })
     .returning({ id: schema.teams.id });
   if (created.length > 0) return created[0].id;
-  return (
-    await db.select({ id: schema.teams.id }).from(schema.teams).where(eq(schema.teams.clerkOrgId, orgId)).limit(1)
-  )[0].id;
+  return (await findTeamByOrg(db, orgId))!;
 }
 
 /** The Clerk session context needed to authorize a request. */

@@ -24,19 +24,25 @@ async function teamPersonIds(db: Db, teamId: number): Promise<Set<number>> {
   return new Set(rows.map((r) => r.id));
 }
 
-/**
- * Resolves (team, weekStart) to the surrogate week id, creating the week row if
- * absent. `weeks` is keyed by a surrogate id with UNIQUE(team_id, week_start).
- */
-async function ensureWeekId(db: Db, teamId: number, weekStart: string): Promise<number> {
-  const existing = (
+/** The surrogate id of a team's week, or undefined if the week doesn't exist yet. */
+async function findWeekId(db: Db, teamId: number, weekStart: string): Promise<number | undefined> {
+  const row = (
     await db
       .select({ id: weeks.id })
       .from(weeks)
       .where(and(eq(weeks.teamId, teamId), eq(weeks.weekStart, weekStart)))
       .limit(1)
   )[0];
-  if (existing) return existing.id;
+  return row?.id;
+}
+
+/**
+ * Resolves (team, weekStart) to the surrogate week id, creating the week row if
+ * absent. `weeks` is keyed by a surrogate id with UNIQUE(team_id, week_start).
+ */
+async function ensureWeekId(db: Db, teamId: number, weekStart: string): Promise<number> {
+  const existing = await findWeekId(db, teamId, weekStart);
+  if (existing !== undefined) return existing;
 
   const [created] = await db
     .insert(weeks)
@@ -45,14 +51,8 @@ async function ensureWeekId(db: Db, teamId: number, weekStart: string): Promise<
     .returning();
   if (created) return created.id;
 
-  // Lost an insert race — re-read.
-  return (
-    await db
-      .select({ id: weeks.id })
-      .from(weeks)
-      .where(and(eq(weeks.teamId, teamId), eq(weeks.weekStart, weekStart)))
-      .limit(1)
-  )[0].id;
+  // Lost an insert race — the row now exists, so re-read it.
+  return (await findWeekId(db, teamId, weekStart))!;
 }
 
 // ---- people ----
@@ -61,12 +61,12 @@ export async function listPeople(teamId: number, includeInactive = false): Promi
   const where = includeInactive
     ? eq(people.teamId, teamId)
     : and(eq(people.teamId, teamId), eq(people.active, true));
-  const rows = await getDb()
+  // The select already projects exactly the `Person` shape (active is a boolean column).
+  return getDb()
     .select({ id: people.id, name: people.name, active: people.active })
     .from(people)
     .where(where)
     .orderBy(asc(people.name));
-  return rows.map((r) => ({ id: r.id, name: r.name, active: r.active }));
 }
 
 export async function addPerson(teamId: number, name: string): Promise<void> {
@@ -211,18 +211,12 @@ export async function listPublishedWeeks(teamId: number): Promise<string[]> {
 
 export async function listAssignments(teamId: number, weekStart: string): Promise<Assignment[]> {
   const db = getDb();
-  const week = (
-    await db
-      .select({ id: weeks.id })
-      .from(weeks)
-      .where(and(eq(weeks.teamId, teamId), eq(weeks.weekStart, weekStart)))
-      .limit(1)
-  )[0];
-  if (!week) return [];
+  const weekId = await findWeekId(db, teamId, weekStart);
+  if (weekId === undefined) return [];
   const rows = await db
     .select({ date: assignments.date, slot: assignments.slot, personId: assignments.personId })
     .from(assignments)
-    .where(eq(assignments.weekId, week.id));
+    .where(eq(assignments.weekId, weekId));
   return rows.map((r) => ({ date: r.date, slot: r.slot as SlotType, personId: r.personId }));
 }
 
@@ -308,19 +302,13 @@ export async function removeAssignment(
   a: Assignment,
 ): Promise<void> {
   const db = getDb();
-  const week = (
-    await db
-      .select({ id: weeks.id })
-      .from(weeks)
-      .where(and(eq(weeks.teamId, teamId), eq(weeks.weekStart, weekStart)))
-      .limit(1)
-  )[0];
-  if (!week) return;
+  const weekId = await findWeekId(db, teamId, weekStart);
+  if (weekId === undefined) return;
   await db
     .delete(assignments)
     .where(
       and(
-        eq(assignments.weekId, week.id),
+        eq(assignments.weekId, weekId),
         eq(assignments.date, a.date),
         eq(assignments.slot, a.slot),
         eq(assignments.personId, a.personId),

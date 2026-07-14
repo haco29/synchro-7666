@@ -231,4 +231,4 @@ Carried from spec §8 — none block Phases 0–3; items 1–2 affect Phase 4 po
 - [x] /build completed (Tasks 0–8; deployed to production)
 - [x] /test completed (Prove-It on review findings: tenancy write-guard + resolveTeamId race + cascade test; 59 green)
 - [x] /review completed (5-axis, incl. independent reviewer; approve with follow-ups — see review notes)
-- [ ] /code-simplify completed
+- [x] /code-simplify completed (extracted findWeekId + findTeamByOrg helpers; dropped a redundant identity map; behavior-preserving, 55 green)
