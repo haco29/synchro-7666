@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import type { LibSQLDatabase } from "drizzle-orm/libsql";
 import { auth } from "@clerk/nextjs/server";
 import { getDb } from "./db/index";
@@ -25,32 +25,51 @@ type Db = LibSQLDatabase<typeof schema>;
  */
 export async function resolveTeamId(db: Db, orgId: string): Promise<number> {
   const existing = (
-    await db.select().from(schema.teams).where(eq(schema.teams.clerkOrgId, orgId)).limit(1)
+    await db.select({ id: schema.teams.id }).from(schema.teams).where(eq(schema.teams.clerkOrgId, orgId)).limit(1)
   )[0];
   if (existing) return existing.id;
 
+  // First org to migrate claims the seeded, still-unlinked "Default Team" so its
+  // roster carries over. The conditional update (WHERE clerk_org_id IS NULL) makes
+  // the claim atomic: a concurrent claim yields no rows and we fall through.
   const unlinked = (
     await db
-      .select()
+      .select({ id: schema.teams.id })
       .from(schema.teams)
       .where(isNull(schema.teams.clerkOrgId))
       .orderBy(asc(schema.teams.id))
       .limit(1)
   )[0];
   if (unlinked) {
-    await db.update(schema.teams).set({ clerkOrgId: orgId }).where(eq(schema.teams.id, unlinked.id));
-    return unlinked.id;
+    const claimed = await db
+      .update(schema.teams)
+      .set({ clerkOrgId: orgId })
+      .where(and(eq(schema.teams.id, unlinked.id), isNull(schema.teams.clerkOrgId)))
+      .returning({ id: schema.teams.id });
+    if (claimed.length > 0) return claimed[0].id;
+    // Lost the claim race — see if this org got linked meanwhile.
+    const linked = (
+      await db.select({ id: schema.teams.id }).from(schema.teams).where(eq(schema.teams.clerkOrgId, orgId)).limit(1)
+    )[0];
+    if (linked) return linked.id;
+    // else fall through and create a fresh team.
   }
 
-  const [created] = await db
+  // Create a fresh team; tolerate a concurrent insert for the same org
+  // (clerk_org_id is UNIQUE) by reading the winner.
+  const created = await db
     .insert(schema.teams)
     .values({
       name: `Team ${orgId}`,
       clerkOrgId: orgId,
       shareToken: randomBytes(16).toString("hex"),
     })
-    .returning();
-  return created.id;
+    .onConflictDoNothing({ target: schema.teams.clerkOrgId })
+    .returning({ id: schema.teams.id });
+  if (created.length > 0) return created[0].id;
+  return (
+    await db.select({ id: schema.teams.id }).from(schema.teams).where(eq(schema.teams.clerkOrgId, orgId)).limit(1)
+  )[0].id;
 }
 
 /** The Clerk session context needed to authorize a request. */

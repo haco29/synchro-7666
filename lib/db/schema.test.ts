@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { eq } from "drizzle-orm";
 import { createClient } from "@libsql/client";
 import { drizzle } from "drizzle-orm/libsql";
 import { migrate } from "drizzle-orm/libsql/migrator";
@@ -79,5 +80,34 @@ describe("schema (initial migration)", () => {
     await expect(
       db.insert(schema.teams).values({ name: "Team B", shareToken: "dup" }),
     ).rejects.toThrow();
+  });
+
+  it("cascades deletes from team → people → constraints, and team → weeks → assignments", async () => {
+    const { db, client } = await freshDb();
+    const [team] = await db
+      .insert(schema.teams)
+      .values({ name: "Team A", shareToken: "tok-a" })
+      .returning();
+    const [person] = await db
+      .insert(schema.people)
+      .values({ teamId: team.id, name: "Dana" })
+      .returning();
+    await db
+      .insert(schema.constraints)
+      .values({ personId: person.id, value: "2026-07-14" });
+    const [week] = await db
+      .insert(schema.weeks)
+      .values({ teamId: team.id, weekStart: "2026-07-19" })
+      .returning();
+    await db
+      .insert(schema.assignments)
+      .values({ weekId: week.id, date: "2026-07-19", slot: "night", personId: person.id });
+
+    await db.delete(schema.teams).where(eq(schema.teams.id, team.id));
+
+    for (const t of ["people", "constraints", "weeks", "assignments"]) {
+      const r = await client.execute(`SELECT COUNT(*) AS n FROM ${t}`);
+      expect(r.rows[0].n).toBe(0);
+    }
   });
 });

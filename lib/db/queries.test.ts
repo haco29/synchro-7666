@@ -249,3 +249,35 @@ describe("getShareToken", () => {
     expect(await q.getTeamIdByShareToken("not-a-real-token")).toBeNull();
   });
 });
+
+describe("tenancy integrity — assignment writers reject foreign people", () => {
+  it("swapSeat ignores a person that belongs to another team", async () => {
+    await q.addPerson(teamA, "Alice");
+    await q.addPerson(teamB, "Bella");
+    const alice = (await q.listPeople(teamA))[0];
+    const bella = (await q.listPeople(teamB))[0];
+
+    // Team B's person must not be seatable into team A's week.
+    await q.swapSeat(teamA, "2026-07-19", "2026-07-19", "morning", null, bella.id);
+    expect(await q.listAssignments(teamA, "2026-07-19")).toHaveLength(0);
+
+    // Team A's own person seats normally.
+    await q.swapSeat(teamA, "2026-07-19", "2026-07-19", "morning", null, alice.id);
+    const seats = await q.listAssignments(teamA, "2026-07-19");
+    expect(seats).toEqual([{ date: "2026-07-19", slot: "morning", personId: alice.id }]);
+  });
+
+  it("replaceWeekAssignments drops rows for people from another team", async () => {
+    await q.addPerson(teamA, "Alice");
+    await q.addPerson(teamB, "Bella");
+    const alice = (await q.listPeople(teamA))[0];
+    const bella = (await q.listPeople(teamB))[0];
+
+    await q.replaceWeekAssignments(teamA, "2026-07-19", [
+      { date: "2026-07-19", slot: "morning", personId: alice.id },
+      { date: "2026-07-19", slot: "night", personId: bella.id }, // foreign — must be dropped
+    ]);
+    const seats = await q.listAssignments(teamA, "2026-07-19");
+    expect(seats).toEqual([{ date: "2026-07-19", slot: "morning", personId: alice.id }]);
+  });
+});

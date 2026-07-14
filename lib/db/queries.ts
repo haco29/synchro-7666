@@ -18,6 +18,12 @@ function isUniqueViolation(e: unknown): boolean {
   return false;
 }
 
+/** Ids of the team's own people — used to reject foreign people from writes. */
+async function teamPersonIds(db: Db, teamId: number): Promise<Set<number>> {
+  const rows = await db.select({ id: people.id }).from(people).where(eq(people.teamId, teamId));
+  return new Set(rows.map((r) => r.id));
+}
+
 /**
  * Resolves (team, weekStart) to the surrogate week id, creating the week row if
  * absent. `weeks` is keyed by a surrogate id with UNIQUE(team_id, week_start).
@@ -226,13 +232,16 @@ export async function replaceWeekAssignments(
   list: Assignment[],
 ): Promise<void> {
   const db = getDb();
+  // Tenancy guard: only seat the team's own people, never a foreign person_id.
+  const memberIds = await teamPersonIds(db, teamId);
+  const valid = list.filter((a) => memberIds.has(a.personId));
   const weekId = await ensureWeekId(db, teamId, weekStart);
   await db.transaction(async (tx) => {
     await tx.delete(assignments).where(eq(assignments.weekId, weekId));
-    if (list.length > 0) {
+    if (valid.length > 0) {
       await tx
         .insert(assignments)
-        .values(list.map((a) => ({ weekId, date: a.date, slot: a.slot, personId: a.personId })));
+        .values(valid.map((a) => ({ weekId, date: a.date, slot: a.slot, personId: a.personId })));
     }
   });
 }
@@ -251,6 +260,8 @@ export async function swapSeat(
   newPersonId: number,
 ): Promise<void> {
   const db = getDb();
+  // Tenancy guard: the incoming person must belong to this team.
+  if (!(await teamPersonIds(db, teamId)).has(newPersonId)) return;
   const weekId = await ensureWeekId(db, teamId, weekStart);
   await db.transaction(async (tx) => {
     const alreadySeated = (
@@ -354,6 +365,7 @@ export async function getShareToken(teamId: number): Promise<string> {
       .where(eq(teams.id, teamId))
       .limit(1)
   )[0];
+  if (!row) throw new Error(`Team ${teamId} not found`);
   return row.shareToken;
 }
 
