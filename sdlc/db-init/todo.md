@@ -12,11 +12,11 @@
 
 ## Phase 1: Database foundation
 - [x] Task 1: Install DB + test tooling; scaffold `drizzle.config.ts`, `package.json` scripts, `.env.example`, `.gitignore` — **DONE**. Added `drizzle-orm`, `@libsql/client`, `drizzle-kit`, `dotenv`, `vitest`; `db:*` + `test` scripts; `drizzle.config.ts` (turso, env-driven); `vitest.config.ts`; `.env.example`; `!.env.example` in `.gitignore`. `pnpm db:generate` runs (0 tables), `tsc` clean. NOTE: `vitest` install made the **pre-existing 27 tests runnable** (no runner was configured before).
-- [ ] Task 2: `lib/db/schema.ts` (6 tables), `lib/db/index.ts` client singleton, initial migration applied to local libSQL
-- [ ] Task 3: `scripts/seed.ts` — default team + idempotent import from `data/synchro.db`; seed test
+- [x] Task 2: `lib/db/schema.ts` (6 tables), `lib/db/index.ts` client singleton, initial migration applied to local libSQL — **DONE**. Drizzle schema: teams (`clerk_org_id`+`share_token` unique), people (`UNIQUE(team_id,name)`), constraints (`UNIQUE(person_id,kind,value)`), weeks (surrogate id, `UNIQUE(team_id,week_start)`), assignments (`UNIQUE(week_id,date,slot,person_id)` + `idx_assignments_week`), settings. `lib/db/index.ts` = lazy libSQL/Drizzle `getDb()`. Migration `drizzle/0000_purple_storm.sql` applied to `data/dev.db`; re-generate = no drift. TDD: `lib/db/schema.test.ts` (5 tests) RED→GREEN; full suite 32 green; `tsc` clean.
+- [x] Task 3: `scripts/seed.ts` — default team + idempotent import from `data/synchro.db`; seed test — **DONE**. `readSourceDb()` (node:sqlite reader) + idempotent `seed()` (team by name, people via `UNIQUE(team_id,name)`, weeks via `UNIQUE(team_id,week_start)`). `pnpm db:seed` ×2 → 1 team / 11 people / 1 week, share_token `2ea7…` preserved. Standalone script (own libSQL client, not index.ts) so `node scripts/seed.ts` runs. Added `allowImportingTsExtensions` to tsconfig (Node needs `.ts` ext) + `.env.local` (gitignored, `file:./data/dev.db`). Constraints/assignments not imported (source has none). TDD: `scripts/seed.test.ts` (4 tests) RED→GREEN; suite 36 green; `tsc` clean.
 
-## Checkpoint: Database foundation
-- [ ] Local DB migrates + seeds; schema matches spec; `pnpm db:*` scripts work; tests green
+## Checkpoint: Database foundation ✅
+- [x] Local DB migrates + seeds; schema matches spec; `pnpm db:*` scripts work; tests green (36)
 
 ## Phase 2: Auth foundation
 - [ ] Task 4: Clerk provider + `clerkMiddleware()` in **`proxy.ts`** (Next 16 convention, Node runtime) gating + sign-in/up routes + env vars; first run the deferred live-redirect check with Clerk keys
