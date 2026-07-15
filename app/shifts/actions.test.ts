@@ -350,18 +350,26 @@ describe("toggleMyShiftUnavailabilityAction (member self)", () => {
 describe("blockWeekAction (admin)", () => {
   it("blocks all 7 days of a week for a person, then clears them", async () => {
     stubAuth({ userId: "admin_1", orgId: "org_A", orgRole: "org:admin" });
-    await blockWeekAction(form({ personId: String(personId), weekStart: "2026-07-12", blocked: "1" }));
-    expect(await q.listConstraintsForWeek(teamId, "2026-07-12")).toHaveLength(7);
-    await blockWeekAction(form({ personId: String(personId), weekStart: "2026-07-12", blocked: "0" }));
+    await blockWeekAction(form({ personId: String(personId), weekStart: "2026-07-15", blocked: "1" }));
+    expect(await q.listConstraintsForWeek(teamId, "2026-07-15")).toHaveLength(7);
+    await blockWeekAction(form({ personId: String(personId), weekStart: "2026-07-15", blocked: "0" }));
+    expect(await q.listConstraintsForWeek(teamId, "2026-07-15")).toHaveLength(0);
+  });
+
+  it("rejects a non-canonical (non-Wednesday) weekStart", async () => {
+    stubAuth({ userId: "admin_1", orgId: "org_A", orgRole: "org:admin" });
+    await expect(
+      blockWeekAction(form({ personId: String(personId), weekStart: "2026-07-12", blocked: "1" })),
+    ).rejects.toThrow();
     expect(await q.listConstraintsForWeek(teamId, "2026-07-12")).toHaveLength(0);
   });
 
   it("rejects a member (non-admin)", async () => {
     stubAuth({ userId: "member_1", orgId: "org_A", orgRole: "org:member" });
     await expect(
-      blockWeekAction(form({ personId: String(personId), weekStart: "2026-07-12", blocked: "1" })),
+      blockWeekAction(form({ personId: String(personId), weekStart: "2026-07-15", blocked: "1" })),
     ).rejects.toThrow();
-    expect(await q.listConstraintsForWeek(teamId, "2026-07-12")).toHaveLength(0);
+    expect(await q.listConstraintsForWeek(teamId, "2026-07-15")).toHaveLength(0);
   });
 });
 
@@ -376,8 +384,8 @@ describe("blockMyWeekAction (member self)", () => {
   it("lets a linked member block their own week", async () => {
     await linkDana();
     stubAuth({ userId: "user_1", orgId: "org_A", orgRole: "org:member" });
-    await blockMyWeekAction(form({ personId: String(personId), weekStart: "2026-07-12", blocked: "1" }));
-    expect(await q.listConstraintsForWeek(teamId, "2026-07-12")).toHaveLength(7);
+    await blockMyWeekAction(form({ personId: String(personId), weekStart: "2026-07-15", blocked: "1" }));
+    expect(await q.listConstraintsForWeek(teamId, "2026-07-15")).toHaveLength(7);
   });
 
   it("rejects blocking another person's week (spoofed personId)", async () => {

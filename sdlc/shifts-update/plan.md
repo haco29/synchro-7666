@@ -60,8 +60,9 @@ Tests + typecheck green; app builds; week grid runs Wed→Tue everywhere (week v
   person busy for the day; keep the morning-after-night softener. `lib/db/queries.ts`:
   `historyBefore` also aggregates `backupCount`. Update `lib/scheduler/generate.test.ts` +
   `lib/db/queries.test.ts`.
-  - *Acceptance:* a generated day (≥5 active people) has exactly 5 assignments, one per role incl.
-    backup; night/kitchen/backup counts balance over multiple weeks; backup adds 0 to work load;
+  - *Acceptance:* a generated day with ≥5 **eligible** people (active and not blocked by
+    availability that day) has exactly 5 assignments, one per role incl. backup;
+    night/kitchen/backup counts balance over multiple weeks; backup adds 0 to work load;
     fewer than 5 eligible → gaps.
   - *Verification:* `pnpm test -- generate queries` green; `pnpm typecheck`.
   - *Dependencies:* None (independent of Task 1). *Scope:* M (4 files).

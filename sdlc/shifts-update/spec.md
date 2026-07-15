@@ -243,3 +243,13 @@ own-person guards on every mutation; no new dependencies.
    (no full day off) — confirm acceptable (implied by ~5–6 answer).
 5. **ADR:** the availability-granularity change extends ADR-0003's model — worth a short ADR or an
    amendment note during the plan/build phase.
+
+## Known limitations
+
+- **Greedy assignment is not an optimal matching.** The scheduler fills roles greedily (work slots
+  first, backup last), so on a short-staffed day with per-shift constraints it can *strand* a
+  person: e.g. someone blocked from `evening` is left as the last candidate for `evening` (→ a gap)
+  when a different assignment would have placed them in an earlier role and filled every work slot.
+  Accepted for now — the team is small (~5–6), gaps are surfaced and manually fixable, and the fix
+  (min-cost bipartite matching) is a substantial scheduler rewrite entangled with the fairness
+  scoring. Revisit if avoidable gaps become common in practice. (Raised in PR #4 review.)

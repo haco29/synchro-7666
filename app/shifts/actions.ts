@@ -63,6 +63,15 @@ function requireShift(value: FormDataEntryValue | null): ShiftType {
   return shift;
 }
 
+/** A canonical week-start: the date must be the Wednesday that anchors its week. */
+function requireWeekStart(value: FormDataEntryValue | null): string {
+  const weekStart = requireDate(value);
+  if (weekStartOf(weekStart) !== weekStart) {
+    throw new Error(`${weekStart} is not a canonical week start`);
+  }
+  return weekStart;
+}
+
 /** A date plus the week-start (Wednesday) of the week it must belong to. */
 function requireWeekDate(
   weekValue: FormDataEntryValue | null,
@@ -202,7 +211,7 @@ export async function blockWeekAction(formData: FormData) {
   await setWeekUnavailable(
     teamId,
     requireId(formData.get("personId")),
-    requireDate(formData.get("weekStart")),
+    requireWeekStart(formData.get("weekStart")),
     formData.get("blocked") === "1",
   );
   revalidatePath("/shifts", "layout");
@@ -214,7 +223,7 @@ export async function blockMyWeekAction(formData: FormData) {
   await setWeekUnavailable(
     teamId,
     personId,
-    requireDate(formData.get("weekStart")),
+    requireWeekStart(formData.get("weekStart")),
     formData.get("blocked") === "1",
   );
   revalidatePath("/shifts", "layout");
