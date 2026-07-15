@@ -212,6 +212,46 @@ describe("per-shift constraints", () => {
   });
 });
 
+describe("block whole week", () => {
+  it("marks all 7 days of the week off, then clears them", async () => {
+    await q.addPerson(teamA, "Alice");
+    const alice = (await q.listPeople(teamA))[0];
+    await q.setWeekUnavailable(teamA, alice.id, "2026-07-12", true);
+    const cons = await q.listConstraintsForWeek(teamA, "2026-07-12");
+    expect(cons).toHaveLength(7);
+    expect(cons.every((c) => c.kind === "unavailable_date")).toBe(true);
+    await q.setWeekUnavailable(teamA, alice.id, "2026-07-12", false);
+    expect(await q.listConstraintsForWeek(teamA, "2026-07-12")).toHaveLength(0);
+  });
+
+  it("is idempotent — re-blocking does not duplicate rows", async () => {
+    await q.addPerson(teamA, "Alice");
+    const alice = (await q.listPeople(teamA))[0];
+    await q.setWeekUnavailable(teamA, alice.id, "2026-07-12", true);
+    await q.setWeekUnavailable(teamA, alice.id, "2026-07-12", true);
+    expect(await q.listConstraintsForWeek(teamA, "2026-07-12")).toHaveLength(7);
+  });
+
+  it("clearing a blocked week leaves per-shift blocks intact", async () => {
+    await q.addPerson(teamA, "Alice");
+    const alice = (await q.listPeople(teamA))[0];
+    await q.setUnavailableShift(teamA, alice.id, "2026-07-14", "morning", true);
+    await q.setWeekUnavailable(teamA, alice.id, "2026-07-12", true);
+    expect(await q.listConstraintsForWeek(teamA, "2026-07-12")).toHaveLength(8);
+    await q.setWeekUnavailable(teamA, alice.id, "2026-07-12", false);
+    const left = await q.listConstraintsForWeek(teamA, "2026-07-12");
+    expect(left).toHaveLength(1);
+    expect(left[0]).toMatchObject({ kind: "unavailable_shift", value: "2026-07-14:morning" });
+  });
+
+  it("does not touch another team's person (tenancy)", async () => {
+    await q.addPerson(teamB, "Zoe");
+    const zoe = (await q.listPeople(teamB))[0];
+    await q.setWeekUnavailable(teamA, zoe.id, "2026-07-12", true); // wrong team
+    expect(await q.listConstraintsForWeek(teamB, "2026-07-12")).toHaveLength(0);
+  });
+});
+
 describe("weeks", () => {
   it("tracks publishing per team independently", async () => {
     expect(await q.isWeekPublished(teamA, "2026-07-12")).toBe(false);

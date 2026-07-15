@@ -178,7 +178,7 @@ Carried from the spec (all have working defaults; none block build):
 ## SDLC Command Coverage
 - [x] /spec completed
 - [x] /plan completed
-- [ ] /build completed
+- [x] /build completed
 - [ ] /test completed
 - [ ] /review completed
 - [ ] /code-simplify completed

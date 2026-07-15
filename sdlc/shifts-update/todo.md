@@ -16,19 +16,19 @@
 
 ## Phase 3: Per-shift availability (Feature C)
 - [x] Task 5: Per-shift constraint model + persistence — ConstraintKind `unavailable_shift`, listConstraintsForWeek both kinds (exclusive upper bound fixes last-day boundary), setUnavailableShift; queries test +4
-- [ ] Task 6: Shift-aware eligibility — generate.ts + violations.ts (morning/evening/night gated per-shift or whole-day; kitchen/backup gated whole-day only); update generate/violations tests
-- [ ] Task 7: Per-shift availability UI + actions — toggleShiftUnavailableAction + member self variant; People page per-shift toggles; update actions test
+- [x] Task 6: Shift-aware eligibility — generate.ts + violations.ts (morning/evening/night gated per-shift or whole-day; kitchen/backup gated whole-day only); generate +3, violations +1 (browser check deferred to Task 7 — no UI to set per-shift constraints yet)
+- [x] Task 7: Per-shift availability UI + actions — toggleShiftUnavailableAction + toggleMyShiftUnavailabilityAction; People page AvailabilityCell (Day + M/E/N toggles) for admin & member; actions test +5 (browser-confirmed: blocked shift honored on regenerate, person still placed elsewhere)
 
 ## Checkpoint: Per-shift availability
-- [ ] Availability is per-shift end-to-end (UI → persistence → generator → violations); member self-serve stays self-scoped; tests green
+- [x] Availability is per-shift end-to-end (UI → persistence → generator → violations); member self-serve stays self-scoped; tests green
 
 ## Phase 4: One-click block-week (Feature D)
-- [ ] Task 8: Block/clear whole week — setWeekUnavailable query, blockWeekAction + member self variant, People page block/clear-week control; update actions test
+- [x] Task 8: Block/clear whole week — setWeekUnavailable query, blockWeekAction + blockMyWeekAction, People page BlockWeekButton (admin column + member); queries +4, actions +4 (browser-confirmed: block week → 7 days off → 0 assignments on regenerate)
 
 ## Phase 5: Docs
-- [ ] Task 9: Amend ADR-0003 (member write scope now includes unavailable_shift + block-week) and architecture.md availability wording
+- [x] Task 9: Amended ADR-0003 (2026-07-15 amendment: two constraint kinds + three self-only member writes) and architecture.md availability wording
 
 ## Checkpoint: Complete
-- [ ] All spec success criteria met
-- [ ] `pnpm test`, `typecheck`, `lint`, `build` pass; UI verified in preview
-- [ ] Ready for review
+- [x] All spec success criteria met
+- [x] `pnpm test` (112), `typecheck`, `lint`, `build` pass; UI verified in preview (week anchor, backup rotation, per-shift availability, block-week)
+- [ ] Ready for review (pending human commit of the tasks)

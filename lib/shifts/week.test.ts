@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addDays, isIsoDate, weekDates, weekStartOf, weekdayOf } from "./week";
+import { addDays, dayLabel, isIsoDate, weekDates, weekStartOf, weekdayOf } from "./week";
 
 describe("week math", () => {
   it("finds the Wednesday starting the week for any day in it", () => {
@@ -31,6 +31,12 @@ describe("week math", () => {
   it("computes weekday index with Sunday = 0", () => {
     expect(weekdayOf("2026-07-12")).toBe(0);
     expect(weekdayOf("2026-07-18")).toBe(6);
+  });
+
+  it("labels a date with its Hebrew weekday plus the date", () => {
+    expect(dayLabel("2026-07-22")).toBe("רביעי, Jul 22"); // Wednesday
+    expect(dayLabel("2026-07-26")).toBe("ראשון, Jul 26"); // Sunday
+    expect(dayLabel("2026-07-25")).toBe("שבת, Jul 25"); // Saturday
   });
 
   it("validates ISO dates", () => {

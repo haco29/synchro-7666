@@ -38,19 +38,29 @@ export function computeViolations(
     }
   }
 
-  const unavailable = new Set(
+  // Whole-day off conflicts with any slot; a per-shift block only conflicts
+  // with an assignment to that same time-shift.
+  const wholeDayOff = new Set(
     constraints
       .filter((c) => c.kind === "unavailable_date")
       .map((c) => `${c.value}:${c.personId}`),
   );
+  const shiftOff = new Set(
+    constraints
+      .filter((c) => c.kind === "unavailable_shift")
+      .map((c) => `${c.value}:${c.personId}`),
+  );
   for (const a of assignments) {
-    if (unavailable.has(`${a.date}:${a.personId}`)) {
+    if (
+      wholeDayOff.has(`${a.date}:${a.personId}`) ||
+      shiftOff.has(`${a.date}:${a.slot}:${a.personId}`)
+    ) {
       violations.push({
         kind: "unavailable",
         date: a.date,
         slot: a.slot,
         personId: a.personId,
-        message: `${nameOf(a.personId)} is marked unavailable on ${dayLabel(a.date)}`,
+        message: `${nameOf(a.personId)} is marked unavailable for ${a.slot} on ${dayLabel(a.date)}`,
       });
     }
   }

@@ -45,9 +45,17 @@ export function generateWeek(input: GenerateInput): GenerateResult {
   const rng = makeRng(input.seed ?? 1);
   const dates = weekDates(input.weekStart);
 
-  const unavailable = new Set(
+  // Whole-day off blocks every slot (incl. kitchen and backup); a per-shift
+  // block only blocks that one time-shift. Keys: `${date}:${personId}` and
+  // `${date}:${shift}:${personId}` (the shift value is already `date:shift`).
+  const wholeDayOff = new Set(
     input.constraints
       .filter((c) => c.kind === "unavailable_date")
+      .map((c) => `${c.value}:${c.personId}`),
+  );
+  const shiftOff = new Set(
+    input.constraints
+      .filter((c) => c.kind === "unavailable_shift")
       .map((c) => `${c.value}:${c.personId}`),
   );
 
@@ -73,7 +81,10 @@ export function generateWeek(input: GenerateInput): GenerateResult {
         const candidates = input.people.filter(
           (p) =>
             p.active &&
-            !unavailable.has(`${date}:${p.id}`) &&
+            !wholeDayOff.has(`${date}:${p.id}`) &&
+            // Only time-shift slots ever have a shiftOff key; kitchen/backup
+            // never match, so they stay gated by whole-day off alone.
+            !shiftOff.has(`${date}:${slot}:${p.id}`) &&
             !busyOn.get(date)?.has(p.id),
         );
         if (candidates.length === 0) {

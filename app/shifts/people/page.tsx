@@ -1,8 +1,12 @@
 import {
   addPersonAction,
+  blockMyWeekAction,
+  blockWeekAction,
   linkPersonAction,
   setPersonActiveAction,
+  toggleMyShiftUnavailabilityAction,
   toggleMyUnavailabilityAction,
+  toggleShiftUnavailableAction,
   toggleUnavailableAction,
   unlinkPersonAction,
 } from "../actions";
@@ -14,48 +18,132 @@ import {
   listPeopleWithUserLinks,
   type PersonWithLink,
 } from "@/lib/db/queries";
+import type { ShiftType } from "@/lib/shifts/types";
+import { SHIFT_TYPES, SLOT_LABELS } from "@/lib/shifts/types";
 import { addDays, dayLabel, isIsoDate, todayIso, weekDates, weekStartOf } from "@/lib/shifts/week";
+
+/** Compact per-shift labels for the availability grid. */
+const SHIFT_LETTER: Record<ShiftType, string> = {
+  morning: "M",
+  evening: "E",
+  night: "N",
+};
 
 export const metadata = { title: "People · Shifts" };
 
+const OFF_CLASSES =
+  "border-red-300 bg-red-100 text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300";
+const FREE_CLASSES =
+  "border-neutral-200 bg-neutral-50 text-neutral-500 hover:bg-neutral-100 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:bg-neutral-800";
+
 /**
- * One availability toggle for (person, date). The `action` is injected so the
- * same control serves an admin editing anyone (`toggleUnavailableAction`) and a
- * member editing only themselves (`toggleMyUnavailabilityAction`).
+ * Availability controls for one (person, date): a whole-day off toggle plus a
+ * per-time-shift toggle for morning/evening/night. Kitchen and backup have no
+ * separate control — they're gated only by the whole-day off. The two actions
+ * are injected so the same cell serves an admin editing anyone and a member
+ * editing only themselves. A whole-day off subsumes the shifts, so the shift
+ * buttons are disabled (and dimmed) while it's set.
  */
-function UnavailabilityToggle({
-  action,
+function AvailabilityCell({
+  dayAction,
+  shiftAction,
   personId,
   personName,
   date,
-  isOff,
+  dayOff,
+  shiftOffOf,
+  active,
+}: {
+  dayAction: (formData: FormData) => Promise<void>;
+  shiftAction: (formData: FormData) => Promise<void>;
+  personId: number;
+  personName: string;
+  date: string;
+  dayOff: boolean;
+  shiftOffOf: (shift: ShiftType) => boolean;
+  active: boolean;
+}) {
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <form action={dayAction}>
+        <input type="hidden" name="personId" value={personId} />
+        <input type="hidden" name="date" value={date} />
+        <input type="hidden" name="unavailable" value={dayOff ? "0" : "1"} />
+        <button
+          type="submit"
+          disabled={!active}
+          aria-pressed={dayOff}
+          aria-label={`${personName} ${dayOff ? "off all day" : "available all day"} on ${dayLabel(date)}`}
+          title={dayOff ? "Off all day — click to clear" : "Click to mark off all day"}
+          className={`h-6 w-16 rounded border text-[10px] disabled:opacity-40 ${dayOff ? OFF_CLASSES : FREE_CLASSES}`}
+        >
+          {dayOff ? "Day off" : "Day"}
+        </button>
+      </form>
+      <div className="flex gap-0.5">
+        {SHIFT_TYPES.map((shift) => {
+          const off = shiftOffOf(shift);
+          return (
+            <form key={shift} action={shiftAction}>
+              <input type="hidden" name="personId" value={personId} />
+              <input type="hidden" name="date" value={date} />
+              <input type="hidden" name="shift" value={shift} />
+              <input type="hidden" name="unavailable" value={off ? "0" : "1"} />
+              <button
+                type="submit"
+                disabled={!active || dayOff}
+                aria-pressed={off}
+                aria-label={`${personName} ${off ? "unavailable" : "available"} for ${SLOT_LABELS[shift]} on ${dayLabel(date)}`}
+                title={`${SLOT_LABELS[shift]} — ${off ? "unavailable, click to clear" : "click to mark unavailable"}`}
+                className={`h-6 w-6 rounded border text-[10px] disabled:opacity-40 ${off ? OFF_CLASSES : FREE_CLASSES}`}
+              >
+                {SHIFT_LETTER[shift]}
+              </button>
+            </form>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** One-click "off for the whole week" / "clear the week" for one person. */
+function BlockWeekButton({
+  action,
+  personId,
+  personName,
+  weekStart,
+  fullyOff,
   active,
 }: {
   action: (formData: FormData) => Promise<void>;
   personId: number;
   personName: string;
-  date: string;
-  isOff: boolean;
+  weekStart: string;
+  fullyOff: boolean;
   active: boolean;
 }) {
   return (
     <form action={action}>
       <input type="hidden" name="personId" value={personId} />
-      <input type="hidden" name="date" value={date} />
-      <input type="hidden" name="unavailable" value={isOff ? "0" : "1"} />
+      <input type="hidden" name="weekStart" value={weekStart} />
+      <input type="hidden" name="blocked" value={fullyOff ? "0" : "1"} />
       <button
         type="submit"
         disabled={!active}
-        aria-pressed={isOff}
-        aria-label={`${personName} ${isOff ? "unavailable" : "available"} on ${dayLabel(date)}`}
-        title={isOff ? "Unavailable — click to clear" : "Available — click to mark unavailable"}
-        className={`h-7 w-7 rounded border text-xs ${
-          isOff
-            ? "border-red-300 bg-red-100 text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300"
-            : "border-neutral-200 bg-neutral-50 text-neutral-400 hover:bg-neutral-100 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:bg-neutral-800"
+        aria-label={
+          fullyOff
+            ? `Clear the whole-week block for ${personName}`
+            : `Mark ${personName} off for the whole week`
+        }
+        title={fullyOff ? "Clear the whole-week block" : "Mark off for the whole week"}
+        className={`rounded border px-2 py-1 text-xs whitespace-nowrap disabled:opacity-40 ${
+          fullyOff
+            ? "border-red-300 text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950"
+            : "border-neutral-300 text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
         }`}
       >
-        {isOff ? "✕" : ""}
+        {fullyOff ? "Clear week" : "Block week"}
       </button>
     </form>
   );
@@ -72,7 +160,14 @@ export default async function PeoplePage({
   const teamId = await currentTeam();
   const admin = await isAdmin();
   const constraints = await listConstraintsForWeek(teamId, weekStart);
-  const unavailable = new Set(constraints.map((c) => `${c.value}:${c.personId}`));
+  // Whole-day off keyed `${date}:${personId}`; per-shift off keyed
+  // `${date}:${shift}:${personId}` (the shift value is already `date:shift`).
+  const dayOff = new Set<string>();
+  const shiftOff = new Set<string>();
+  for (const c of constraints) {
+    if (c.kind === "unavailable_date") dayOff.add(`${c.value}:${c.personId}`);
+    else if (c.kind === "unavailable_shift") shiftOff.add(`${c.value}:${c.personId}`);
+  }
   const dates = weekDates(weekStart);
 
   // Members manage only their own availability; unlinked members are read-only.
@@ -85,7 +180,8 @@ export default async function PeoplePage({
         weekStart={weekStart}
         dates={dates}
         me={me}
-        unavailable={unavailable}
+        dayOff={dayOff}
+        shiftOff={shiftOff}
       />
     );
   }
@@ -98,7 +194,8 @@ export default async function PeoplePage({
       dates={dates}
       people={people}
       members={members}
-      unavailable={unavailable}
+      dayOff={dayOff}
+      shiftOff={shiftOff}
     />
   );
 }
@@ -108,12 +205,14 @@ function MemberView({
   weekStart,
   dates,
   me,
-  unavailable,
+  dayOff,
+  shiftOff,
 }: {
   weekStart: string;
   dates: string[];
   me: PersonWithLink | null;
-  unavailable: Set<string>;
+  dayOff: Set<string>;
+  shiftOff: Set<string>;
 }) {
   return (
     <section className="space-y-3">
@@ -129,26 +228,36 @@ function MemberView({
         </p>
       ) : (
         <>
-          <p className="text-sm text-neutral-500">
-            Mark the days you are <strong>unavailable</strong> this week.
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {dates.map((date) => {
-              const isOff = unavailable.has(`${date}:${me.id}`);
-              return (
-                <div key={date} className="flex flex-col items-center gap-1">
-                  <span className="text-xs text-neutral-500">{dayLabel(date)}</span>
-                  <UnavailabilityToggle
-                    action={toggleMyUnavailabilityAction}
-                    personId={me.id}
-                    personName={me.name}
-                    date={date}
-                    isOff={isOff}
-                    active={me.active}
-                  />
-                </div>
-              );
-            })}
+          <div className="flex flex-wrap items-center gap-3">
+            <p className="text-sm text-neutral-500">
+              Mark when you are <strong>unavailable</strong> this week — a whole day, or a single
+              shift (<strong>M</strong>orning / <strong>E</strong>vening / <strong>N</strong>ight).
+            </p>
+            <BlockWeekButton
+              action={blockMyWeekAction}
+              personId={me.id}
+              personName={me.name}
+              weekStart={weekStart}
+              fullyOff={dates.every((date) => dayOff.has(`${date}:${me.id}`))}
+              active={me.active}
+            />
+          </div>
+          <div className="flex flex-wrap gap-3">
+            {dates.map((date) => (
+              <div key={date} className="flex flex-col items-center gap-1">
+                <span className="text-xs text-neutral-500">{dayLabel(date)}</span>
+                <AvailabilityCell
+                  dayAction={toggleMyUnavailabilityAction}
+                  shiftAction={toggleMyShiftUnavailabilityAction}
+                  personId={me.id}
+                  personName={me.name}
+                  date={date}
+                  dayOff={dayOff.has(`${date}:${me.id}`)}
+                  shiftOffOf={(shift) => shiftOff.has(`${date}:${shift}:${me.id}`)}
+                  active={me.active}
+                />
+              </div>
+            ))}
           </div>
         </>
       )}
@@ -162,13 +271,15 @@ function AdminView({
   dates,
   people,
   members,
-  unavailable,
+  dayOff,
+  shiftOff,
 }: {
   weekStart: string;
   dates: string[];
   people: PersonWithLink[];
   members: OrgMember[];
-  unavailable: Set<string>;
+  dayOff: Set<string>;
+  shiftOff: Set<string>;
 }) {
   return (
     <div className="space-y-8">
@@ -196,7 +307,9 @@ function AdminView({
           <WeekNav weekStart={weekStart} hrefFor={(w) => `/shifts/people?week=${w}`} />
         </div>
         <p className="text-sm text-neutral-500">
-          Check the days each person is <strong>unavailable</strong> during this week.
+          Mark when each person is <strong>unavailable</strong> this week — a whole day, or a
+          single shift (<strong>M</strong>orning / <strong>E</strong>vening / <strong>N</strong>ight).
+          Kitchen and backup are only blocked by a whole-day off.
         </p>
 
         {people.length === 0 ? (
@@ -214,6 +327,7 @@ function AdminView({
                       {dayLabel(d)}
                     </th>
                   ))}
+                  <th className="px-2 py-2 text-center font-medium">Whole week</th>
                   <th className="py-2 pl-4 font-medium">Status</th>
                   <th className="py-2 pl-4 font-medium">Linked account</th>
                 </tr>
@@ -227,16 +341,28 @@ function AdminView({
                     <td className="py-2 pr-4 font-medium">{p.name}</td>
                     {dates.map((date) => (
                       <td key={date} className="px-2 py-2 text-center">
-                        <UnavailabilityToggle
-                          action={toggleUnavailableAction}
+                        <AvailabilityCell
+                          dayAction={toggleUnavailableAction}
+                          shiftAction={toggleShiftUnavailableAction}
                           personId={p.id}
                           personName={p.name}
                           date={date}
-                          isOff={unavailable.has(`${date}:${p.id}`)}
+                          dayOff={dayOff.has(`${date}:${p.id}`)}
+                          shiftOffOf={(shift) => shiftOff.has(`${date}:${shift}:${p.id}`)}
                           active={p.active}
                         />
                       </td>
                     ))}
+                    <td className="px-2 py-2 text-center">
+                      <BlockWeekButton
+                        action={blockWeekAction}
+                        personId={p.id}
+                        personName={p.name}
+                        weekStart={weekStart}
+                        fullyOff={dates.every((date) => dayOff.has(`${date}:${p.id}`))}
+                        active={p.active}
+                      />
+                    </td>
                     <td className="py-2 pl-4">
                       <form action={setPersonActiveAction}>
                         <input type="hidden" name="personId" value={p.id} />

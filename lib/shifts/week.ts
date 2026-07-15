@@ -50,14 +50,16 @@ export function todayIso(): string {
   return toIso(new Date());
 }
 
-const DAY_FORMAT = new Intl.DateTimeFormat("en-US", {
-  weekday: "short",
+/** Hebrew weekday names, indexed by `weekdayOf` (Sunday = 0 … Saturday = 6). */
+const HEBREW_WEEKDAYS = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
+
+const DATE_FORMAT = new Intl.DateTimeFormat("en-US", {
   month: "short",
   day: "numeric",
   timeZone: "UTC",
 });
 
-/** Human label like "Sun, Jul 12". */
+/** Human label like "רביעי, Jul 22" — Hebrew weekday plus the date. */
 export function dayLabel(date: string): string {
-  return DAY_FORMAT.format(toUtc(date));
+  return `${HEBREW_WEEKDAYS[weekdayOf(date)]}, ${DATE_FORMAT.format(toUtc(date))}`;
 }

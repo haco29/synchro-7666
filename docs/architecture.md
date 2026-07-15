@@ -25,8 +25,10 @@ tenants** — a Clerk Organization maps 1:1 to an internal `teams` row
 - **Mutations live in Server Actions and must re-check authz** — call `requireAdmin()` (editors)
   or `requireMember()` (viewers). Server Actions are POST-reachable, so `proxy.ts` alone is **not**
   sufficient. One exception to "viewers are read-only": a member may edit **their own**
-  unavailability via `requireLinkedMember()`, which resolves the caller's `people` row server-side
-  and rejects any other `personId` ([ADR-0003](decisions/0003-member-self-availability.md)).
+  unavailability — whole-day, a single time-shift, or a one-click whole-week block — via
+  `requireLinkedMember()`, which resolves the caller's `people` row server-side and rejects any
+  other `personId` ([ADR-0003](decisions/0003-member-self-availability.md), incl. the 2026-07-15
+  amendment).
 - **Route gating is `proxy.ts`**, not `middleware.ts` (Next 16 renamed `middleware` → `proxy`;
   Node runtime).
 - **No `users` table** — Clerk owns identity. `people` are schedulable subjects, not app users.

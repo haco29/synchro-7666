@@ -11,7 +11,7 @@ import type {
   ShiftType,
   SlotType,
 } from "../shifts/types";
-import { addDays } from "../shifts/week";
+import { addDays, weekDates } from "../shifts/week";
 
 type Db = LibSQLDatabase<typeof schema>;
 
@@ -311,6 +311,48 @@ export async function setUnavailableShift(
           eq(constraints.personId, personId),
           eq(constraints.kind, "unavailable_shift"),
           eq(constraints.value, value),
+        ),
+      );
+  }
+}
+
+/**
+ * Block or clear a person's whole week in one call: writes (or removes)
+ * `unavailable_date` for all 7 days of the week — the "vacation week" action.
+ * Clearing only removes whole-day rows, so any per-shift blocks in the week
+ * survive.
+ */
+export async function setWeekUnavailable(
+  teamId: number,
+  personId: number,
+  weekStart: string,
+  blocked: boolean,
+): Promise<void> {
+  const db = getDb();
+  // Tenancy guard: only touch constraints for a person on this team.
+  const person = (
+    await db
+      .select({ id: people.id })
+      .from(people)
+      .where(and(eq(people.id, personId), eq(people.teamId, teamId)))
+      .limit(1)
+  )[0];
+  if (!person) return;
+
+  const dates = weekDates(weekStart);
+  if (blocked) {
+    await db
+      .insert(constraints)
+      .values(dates.map((value) => ({ personId, kind: "unavailable_date" as const, value })))
+      .onConflictDoNothing();
+  } else {
+    await db
+      .delete(constraints)
+      .where(
+        and(
+          eq(constraints.personId, personId),
+          eq(constraints.kind, "unavailable_date"),
+          inArray(constraints.value, dates),
         ),
       );
   }
