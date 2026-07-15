@@ -39,4 +39,28 @@ describe("computeViolations", () => {
     expect(violations[0]).toMatchObject({ kind: "unavailable", personId: 2 });
     expect(violations[0].message).toContain("Bob");
   });
+
+  it("flags an assignment to a blocked time-shift but not to other roles that day", () => {
+    const constraints: Constraint[] = [
+      { id: 1, personId: 1, kind: "unavailable_shift", value: "2026-07-13:morning" },
+    ];
+    const conflicting: Assignment[] = [
+      { date: "2026-07-13", slot: "morning", personId: 1 },
+    ];
+    const clean: Assignment[] = [
+      { date: "2026-07-13", slot: "evening", personId: 1 }, // different shift, same day
+      { date: "2026-07-13", slot: "kitchen", personId: 1 },
+    ];
+    expect(computeViolations(conflicting, constraints, people)).toHaveLength(1);
+    expect(computeViolations(conflicting, constraints, people)[0]).toMatchObject({
+      kind: "unavailable",
+      slot: "morning",
+      personId: 1,
+    });
+    // evening + kitchen aren't blocked by a morning-only constraint (kitchen has
+    // its own double-book check via the same day, but no unavailable violation).
+    expect(
+      computeViolations(clean, constraints, people).filter((v) => v.kind === "unavailable"),
+    ).toHaveLength(0);
+  });
 });

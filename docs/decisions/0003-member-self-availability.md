@@ -35,7 +35,8 @@ on top of it.
   that already governs `team_id`.
 - **Member write scope is exactly one thing:** toggling their own `unavailable_date` constraints.
   No assignments, roster, activation, or publish. The mutation reuses `setUnavailable()`; only the
-  *authorization* differs from the admin path.
+  *authorization* differs from the admin path. *(Widened 2026-07-15 to per-shift and whole-week
+  availability — see the Amendment below. The scope is still "own availability only".)*
 - **Unlinked members stay read-only** (unchanged from ADR-0002). Relinking a Clerk user moves the
   link (last-write-wins). No time cutoff: a member may edit any date; conflicts with an existing
   assignment surface as the existing non-blocking violation warnings and never auto-remove a seat.
@@ -71,3 +72,26 @@ on top of it.
   migration. Tracked in the branch spec's Open Questions.
 - **Migrations are not automatic** (per ADR-0001 / architecture.md): the `clerk_user_id` migration
   must be applied to hosted Turso separately at deploy.
+
+## Amendment (2026-07-15): per-shift availability + whole-week block
+
+The `shifts-update` branch widened availability from a single whole-day concept to two constraint
+kinds, and grew the member self-service surface accordingly. The core decision above is unchanged —
+identity is still resolved server-side and a member may still edit **only their own** availability.
+
+- **Two constraint kinds** (`constraints.kind`, free TEXT — no migration):
+  - `unavailable_date`, value `YYYY-MM-DD` — off the **whole day** (ineligible for every slot,
+    including kitchen and backup). Unchanged; existing rows keep this meaning.
+  - `unavailable_shift`, value `YYYY-MM-DD:<shift>` — off **one time-shift** (morning/evening/night)
+    only; the person stays eligible for the other shifts, kitchen, and backup.
+- **Member write scope is now three self-only mutations**, all guarded exactly as the original
+  `toggleMyUnavailabilityAction` (resolve own person via `requireLinkedMember()`, reject a
+  mismatched `personId`, refuse inactive members):
+  - `toggleMyUnavailabilityAction` → `setUnavailable()` (whole day, as before),
+  - `toggleMyShiftUnavailabilityAction` → `setUnavailableShift()` (one time-shift),
+  - `blockMyWeekAction` → `setWeekUnavailable()` (whole-day off across all 7 days of the week — a
+    one-click "vacation week"; clearing removes only the whole-day rows, leaving per-shift blocks).
+- **No new capability class.** These are still "own availability" writes — no assignments, roster,
+  activation, or publish — so the ADR-0002 role model and the proxy-plus-recheck rule are intact.
+  The admin equivalents (`toggleShiftUnavailableAction`, `blockWeekAction`) sit behind
+  `requireAdmin()` like the rest of the admin surface.

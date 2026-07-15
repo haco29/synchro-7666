@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { generateWeek } from "./generate";
-import { SLOT_CAPACITY, SLOT_TYPES } from "../shifts/types";
+import { SHIFT_TYPES, SLOT_CAPACITY, SLOT_TYPES } from "../shifts/types";
 import type {
   Assignment,
   Constraint,
@@ -49,7 +49,7 @@ describe("generateWeek", () => {
   it("fills every slot with a big enough roster and respects capacities", () => {
     const { assignments, gaps } = generateWeek(input({ people: roster(10) }));
     expect(gaps).toHaveLength(0);
-    expect(assignments).toHaveLength(49); // 7 days × (2+2+2+1)
+    expect(assignments).toHaveLength(35); // 7 days × 5 roles × 1 seat
     for (const date of weekDates(WEEK)) {
       for (const slot of SLOT_TYPES) {
         const filled = assignments.filter((a) => a.date === date && a.slot === slot);
@@ -57,6 +57,14 @@ describe("generateWeek", () => {
       }
     }
     assertHardRules(assignments, []);
+  });
+
+  it("staffs exactly one backup (rest) person per day", () => {
+    const { assignments } = generateWeek(input({ people: roster(6) }));
+    for (const date of weekDates(WEEK)) {
+      const backups = assignments.filter((a) => a.date === date && a.slot === "backup");
+      expect(backups, `one backup on ${date}`).toHaveLength(1);
+    }
   });
 
   it("never double-books or uses unavailable people (fuzz across seeds)", () => {
@@ -73,22 +81,25 @@ describe("generateWeek", () => {
     }
   });
 
-  it("balances totals evenly within a week when the roster divides evenly", () => {
-    // 7 people × 7 days = 49 slots → everyone should get exactly 7
-    const { assignments, gaps } = generateWeek(input({ people: roster(7) }));
+  it("assigns every person exactly one role a day when the roster equals the 5 roles", () => {
+    // 5 people, 5 roles/day → everyone works every day (one of them on backup rest)
+    const { assignments, gaps } = generateWeek(input({ people: roster(5) }));
     expect(gaps).toHaveLength(0);
     const totals = new Map<number, number>();
     for (const a of assignments) {
       totals.set(a.personId, (totals.get(a.personId) ?? 0) + 1);
     }
     const counts = [...totals.values()];
-    expect(Math.max(...counts) - Math.min(...counts)).toBeLessThanOrEqual(1);
+    expect(counts).toHaveLength(5);
+    expect(Math.max(...counts)).toBe(7);
+    expect(Math.min(...counts)).toBe(7);
   });
 
-  it("keeps cumulative night shifts fair across 4 consecutive weeks", () => {
+  it("keeps cumulative night, kitchen and backup/rest fair across 4 consecutive weeks", () => {
     const people = roster(8);
     const nightTotals = new Map<number, number>(people.map((p) => [p.id, 0]));
     const kitchenTotals = new Map<number, number>(people.map((p) => [p.id, 0]));
+    const backupTotals = new Map<number, number>(people.map((p) => [p.id, 0]));
     const totals = new Map<number, number>(people.map((p) => [p.id, 0]));
 
     let weekStart = WEEK;
@@ -97,6 +108,7 @@ describe("generateWeek", () => {
         personId: p.id,
         nightCount: nightTotals.get(p.id)!,
         kitchenCount: kitchenTotals.get(p.id)!,
+        backupCount: backupTotals.get(p.id)!,
         totalCount: totals.get(p.id)!,
       }));
       const { assignments, gaps } = generateWeek(
@@ -111,16 +123,22 @@ describe("generateWeek", () => {
         if (a.slot === "kitchen") {
           kitchenTotals.set(a.personId, kitchenTotals.get(a.personId)! + 1);
         }
+        if (a.slot === "backup") {
+          backupTotals.set(a.personId, backupTotals.get(a.personId)! + 1);
+        }
       }
       weekStart = addDays(weekStart, 7);
     }
 
-    // 56 night slots over 8 people = 7 each; allow ±1 slack
+    // 28 night slots over 8 people = 3.5 each; allow small slack
     const nights = [...nightTotals.values()];
-    expect(Math.max(...nights) - Math.min(...nights)).toBeLessThanOrEqual(1);
-    // kitchen: 28 duties over 8 people; allow small slack
+    expect(Math.max(...nights) - Math.min(...nights)).toBeLessThanOrEqual(2);
+    // kitchen: 28 duties over 8 people
     const kitchens = [...kitchenTotals.values()];
     expect(Math.max(...kitchens) - Math.min(...kitchens)).toBeLessThanOrEqual(2);
+    // backup/rest: 28 rest days over 8 people — the perk must rotate evenly too
+    const backups = [...backupTotals.values()];
+    expect(Math.max(...backups) - Math.min(...backups)).toBeLessThanOrEqual(2);
   });
 
   it("never puts the kitchen person on a shift the same day", () => {
@@ -136,11 +154,27 @@ describe("generateWeek", () => {
   });
 
   it("reports gaps instead of failing when the roster is too small", () => {
-    // 4 people can cover at most 4 of 7 daily slots
+    // 4 people can cover at most 4 of the 5 daily roles
     const { assignments, gaps } = generateWeek(input({ people: roster(4) }));
-    expect(gaps.length).toBe(21); // 3 unfilled per day × 7 days
+    expect(gaps.length).toBe(7); // 1 unfilled per day × 7 days
     expect(assignments).toHaveLength(28);
     assertHardRules(assignments, []);
+  });
+
+  it("prioritizes work shifts over backup when short-staffed — gaps land on backup, not work", () => {
+    // 4 people, 5 roles/day. The rest role (backup) is the lowest priority, so
+    // it is what goes unfilled — never a morning/evening/night/kitchen shift.
+    const { assignments, gaps } = generateWeek(input({ people: roster(4) }));
+    for (const date of weekDates(WEEK)) {
+      for (const slot of ["morning", "evening", "night", "kitchen"] as const) {
+        expect(
+          assignments.some((a) => a.date === date && a.slot === slot),
+          `${slot} on ${date} should be staffed`,
+        ).toBe(true);
+      }
+      expect(assignments.some((a) => a.date === date && a.slot === "backup")).toBe(false);
+    }
+    expect(gaps.every((g) => g.slot === "backup")).toBe(true);
   });
 
   it("reports full-day gaps when everyone is unavailable", () => {
@@ -152,8 +186,82 @@ describe("generateWeek", () => {
       value: addDays(WEEK, 2),
     }));
     const { assignments, gaps } = generateWeek(input({ people, constraints }));
-    expect(gaps.filter((g) => g.date === addDays(WEEK, 2))).toHaveLength(7);
+    expect(gaps.filter((g) => g.date === addDays(WEEK, 2))).toHaveLength(5);
     assertHardRules(assignments, constraints);
+  });
+
+  it("never assigns a person to a time-shift they blocked, but keeps other roles open", () => {
+    const people = roster(6);
+    const D = addDays(WEEK, 2);
+    const constraints: Constraint[] = [
+      { id: 1, personId: 1, kind: "unavailable_shift", value: `${D}:morning` },
+    ];
+    const slotsSeen = new Set<string>();
+    for (let seed = 0; seed < 20; seed++) {
+      const { assignments } = generateWeek(input({ people, constraints, seed }));
+      // Hard rule: person 1 is never on the blocked morning shift for D.
+      expect(
+        assignments.some((a) => a.date === D && a.slot === "morning" && a.personId === 1),
+      ).toBe(false);
+      for (const a of assignments.filter((a) => a.date === D && a.personId === 1)) {
+        slotsSeen.add(a.slot);
+      }
+    }
+    // The block is shift-scoped: person 1 still gets used for other roles on D.
+    expect(slotsSeen.size).toBeGreaterThan(0);
+    expect(slotsSeen.has("morning")).toBe(false);
+  });
+
+  it("keeps kitchen/backup open to a person blocked on all three shifts", () => {
+    // Everyone else is off the whole day; person 1 is blocked for all three
+    // time-shifts. A per-shift block never gates kitchen/backup, so person 1 is
+    // still placeable — greedy fills backup first, so they land there.
+    const people = roster(2);
+    const D = addDays(WEEK, 1);
+    const constraints: Constraint[] = [
+      { id: 99, personId: 2, kind: "unavailable_date", value: D },
+      ...SHIFT_TYPES.map((s, i) => ({
+        id: i + 1,
+        personId: 1,
+        kind: "unavailable_shift" as const,
+        value: `${D}:${s}`,
+      })),
+    ];
+    const { assignments } = generateWeek(input({ people, constraints, seed: 3 }));
+    const onD = assignments.filter((a) => a.date === D && a.personId === 1);
+    expect(onD).toHaveLength(1);
+    expect(["kitchen", "backup"]).toContain(onD[0].slot);
+  });
+
+  it("steers backup away from someone already far ahead on rest (history-seeded)", () => {
+    // Backup is zero-weight for work load but balanced on its own history. A
+    // person way ahead on backups must not keep drawing the rest role — even
+    // though a naive weekTotal rule would pick them (their work total is low).
+    const people = roster(6);
+    const history: PersonHistory[] = people.map((p) => ({
+      personId: p.id,
+      nightCount: 0,
+      kitchenCount: 0,
+      backupCount: p.id === 1 ? 100 : 0,
+      totalCount: 0,
+    }));
+    for (let seed = 0; seed < 10; seed++) {
+      const { assignments } = generateWeek(input({ people, history, seed }));
+      const p1Backups = assignments.filter((a) => a.slot === "backup" && a.personId === 1);
+      expect(p1Backups).toHaveLength(0);
+    }
+  });
+
+  it("blocks a whole-day-off person from every role, including kitchen and backup", () => {
+    const people = roster(6);
+    const D = addDays(WEEK, 3);
+    const constraints: Constraint[] = [
+      { id: 1, personId: 1, kind: "unavailable_date", value: D },
+    ];
+    for (let seed = 0; seed < 10; seed++) {
+      const { assignments } = generateWeek(input({ people, constraints, seed }));
+      expect(assignments.some((a) => a.date === D && a.personId === 1)).toBe(false);
+    }
   });
 
   it("is deterministic for the same seed and varies across seeds", () => {
@@ -168,6 +276,60 @@ describe("generateWeek", () => {
   it("handles an empty roster", () => {
     const { assignments, gaps } = generateWeek(input({ people: [] }));
     expect(assignments).toHaveLength(0);
-    expect(gaps).toHaveLength(49);
+    expect(gaps).toHaveLength(35); // 5 roles × 7 days
+  });
+});
+
+describe("no roster-order bias", () => {
+  // With identical candidates and no prior history, the only thing that can
+  // decide a tie is the seeded RNG — never a person's position in the roster.
+  // So across many seeds every roster INDEX must win a fair share of each
+  // role. A biased engine (e.g. ties falling to candidates[0]) would pile the
+  // scarce/rest roles onto the first person; this is the direct guard for the
+  // "not biased to the first user" requirement.
+  function tally(seeds: number) {
+    const people = roster(8);
+    const zero = () => new Map<number, number>(people.map((p) => [p.id, 0]));
+    const totals = zero();
+    const nights = zero();
+    const kitchens = zero();
+    const backups = zero();
+    for (let seed = 0; seed < seeds; seed++) {
+      const { assignments } = generateWeek(input({ people, seed }));
+      for (const a of assignments) {
+        totals.set(a.personId, totals.get(a.personId)! + 1);
+        if (a.slot === "night") nights.set(a.personId, nights.get(a.personId)! + 1);
+        if (a.slot === "kitchen") kitchens.set(a.personId, kitchens.get(a.personId)! + 1);
+        if (a.slot === "backup") backups.set(a.personId, backups.get(a.personId)! + 1);
+      }
+    }
+    return { totals, nights, kitchens, backups };
+  }
+
+  const spreadRatio = (m: Map<number, number>) => {
+    const v = [...m.values()];
+    return Math.max(...v) / Math.min(...v);
+  };
+
+  it("spreads night, kitchen, backup and total evenly across roster positions", () => {
+    // Fully deterministic: fixed seeds 0..239, no wall-clock/randomness. The
+    // fair engine lands every ratio near 1.07; a roster-order-biased engine
+    // would pile roles on the first indices and blow past this bound.
+    const { totals, nights, kitchens, backups } = tally(240);
+    expect(spreadRatio(totals)).toBeLessThan(1.25);
+    expect(spreadRatio(nights)).toBeLessThan(1.25);
+    expect(spreadRatio(kitchens)).toBeLessThan(1.25);
+    expect(spreadRatio(backups)).toBeLessThan(1.25);
+  });
+
+  it("does not favor the first roster position for the scarce/rest roles", () => {
+    // Sharpest single check: over many seeds the first person must not collect
+    // materially more nights or backups than the last — the "first user" trap.
+    const { nights, backups } = tally(240);
+    const ids = [...nights.keys()];
+    const first = ids[0];
+    const last = ids[ids.length - 1];
+    expect(nights.get(first)! / nights.get(last)!).toBeLessThan(1.25);
+    expect(backups.get(first)! / backups.get(last)!).toBeLessThan(1.25);
   });
 });

@@ -17,14 +17,16 @@ import {
   replaceWeekAssignments,
   setPersonActive,
   setUnavailable,
+  setUnavailableShift,
   setWeekPublished,
+  setWeekUnavailable,
   swapSeat,
   unlinkPerson,
 } from "@/lib/db/queries";
 import { generateWeek } from "@/lib/scheduler/generate";
-import type { SlotType } from "@/lib/shifts/types";
-import { SLOT_TYPES } from "@/lib/shifts/types";
-import { isIsoDate, sundayOf } from "@/lib/shifts/week";
+import type { ShiftType, SlotType } from "@/lib/shifts/types";
+import { SHIFT_TYPES, SLOT_TYPES } from "@/lib/shifts/types";
+import { isIsoDate, weekStartOf } from "@/lib/shifts/week";
 
 // Server Actions are directly POSTable, so every input is validated here —
 // the forms rendering them are not a trust boundary.
@@ -52,14 +54,32 @@ function requireSlot(value: FormDataEntryValue | null): SlotType {
   return slot;
 }
 
-/** A date plus the Sunday of the week it must belong to. */
+/** Availability is per time-shift only — kitchen/backup are never shift-blocked. */
+function requireShift(value: FormDataEntryValue | null): ShiftType {
+  const shift = String(value) as ShiftType;
+  if (!SHIFT_TYPES.includes(shift)) {
+    throw new Error(`Invalid shift: ${String(value)}`);
+  }
+  return shift;
+}
+
+/** A canonical week-start: the date must be the Wednesday that anchors its week. */
+function requireWeekStart(value: FormDataEntryValue | null): string {
+  const weekStart = requireDate(value);
+  if (weekStartOf(weekStart) !== weekStart) {
+    throw new Error(`${weekStart} is not a canonical week start`);
+  }
+  return weekStart;
+}
+
+/** A date plus the week-start (Wednesday) of the week it must belong to. */
 function requireWeekDate(
   weekValue: FormDataEntryValue | null,
   dateValue: FormDataEntryValue | null,
 ): { weekStart: string; date: string } {
   const weekStart = requireDate(weekValue);
   const date = requireDate(dateValue);
-  if (sundayOf(date) !== weekStart) {
+  if (weekStartOf(date) !== weekStart) {
     throw new Error(`Date ${date} is not in the week of ${weekStart}`);
   }
   return { weekStart, date };
@@ -130,26 +150,81 @@ export async function toggleUnavailableAction(formData: FormData) {
 }
 
 /**
- * A member toggling *their own* unavailability. The caller's person is resolved
- * server-side from their Clerk identity (`requireLinkedMember`); the form's
- * `personId` is only accepted if it matches — a spoofed id is rejected, never
- * trusted. Unlinked members are refused (requireLinkedMember throws).
+ * Resolve the caller's own person for a self-service availability edit (ADR-0003).
+ * Identity is derived server-side (`requireLinkedMember`); the form's `personId`
+ * is accepted only if it matches — a spoofed id is rejected, never trusted.
+ * Inactive members are refused here too: the UI disables it, but the action is
+ * POST-reachable. Unlinked members are refused (`requireLinkedMember` throws).
  */
-export async function toggleMyUnavailabilityAction(formData: FormData) {
+async function requireOwnEditablePerson(
+  formData: FormData,
+): Promise<{ teamId: number; personId: number }> {
   const { teamId, personId } = await requireLinkedMember();
   if (requireId(formData.get("personId")) !== personId) {
     throw new Error("Cannot edit another person's availability");
   }
-  // Inactive members are off the roster — the UI disables this, but the action
-  // is POST-reachable, so enforce it server-side too.
   if (!(await isPersonActive(teamId, personId))) {
     throw new Error("Inactive member cannot edit availability");
   }
+  return { teamId, personId };
+}
+
+/** A member toggling *their own* whole-day unavailability. */
+export async function toggleMyUnavailabilityAction(formData: FormData) {
+  const { teamId, personId } = await requireOwnEditablePerson(formData);
   await setUnavailable(
     teamId,
     personId,
     requireDate(formData.get("date")),
     formData.get("unavailable") === "1",
+  );
+  revalidatePath("/shifts", "layout");
+}
+
+export async function toggleShiftUnavailableAction(formData: FormData) {
+  const { teamId } = await requireAdmin();
+  await setUnavailableShift(
+    teamId,
+    requireId(formData.get("personId")),
+    requireDate(formData.get("date")),
+    requireShift(formData.get("shift")),
+    formData.get("unavailable") === "1",
+  );
+  revalidatePath("/shifts", "layout");
+}
+
+/** Member editing *their own* per-shift availability. */
+export async function toggleMyShiftUnavailabilityAction(formData: FormData) {
+  const { teamId, personId } = await requireOwnEditablePerson(formData);
+  await setUnavailableShift(
+    teamId,
+    personId,
+    requireDate(formData.get("date")),
+    requireShift(formData.get("shift")),
+    formData.get("unavailable") === "1",
+  );
+  revalidatePath("/shifts", "layout");
+}
+
+export async function blockWeekAction(formData: FormData) {
+  const { teamId } = await requireAdmin();
+  await setWeekUnavailable(
+    teamId,
+    requireId(formData.get("personId")),
+    requireWeekStart(formData.get("weekStart")),
+    formData.get("blocked") === "1",
+  );
+  revalidatePath("/shifts", "layout");
+}
+
+/** Member blocking/clearing *their own* whole week. */
+export async function blockMyWeekAction(formData: FormData) {
+  const { teamId, personId } = await requireOwnEditablePerson(formData);
+  await setWeekUnavailable(
+    teamId,
+    personId,
+    requireWeekStart(formData.get("weekStart")),
+    formData.get("blocked") === "1",
   );
   revalidatePath("/shifts", "layout");
 }
@@ -198,7 +273,7 @@ export async function clearSlotAction(formData: FormData) {
   const { teamId } = await requireAdmin();
   const date = requireDate(formData.get("date"));
   const slot = requireSlot(formData.get("slot"));
-  await removeAssignment(teamId, sundayOf(date), {
+  await removeAssignment(teamId, weekStartOf(date), {
     date,
     slot,
     personId: requireId(formData.get("personId")),
