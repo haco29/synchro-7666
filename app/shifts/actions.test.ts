@@ -1,9 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createClient } from "@libsql/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createClient, type Client } from "@libsql/client";
 import { drizzle, type LibSQLDatabase } from "drizzle-orm/libsql";
 import { migrate } from "drizzle-orm/libsql/migrator";
 import { eq } from "drizzle-orm";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import * as schema from "@/lib/db/schema";
@@ -13,16 +13,25 @@ const holder = vi.hoisted(() => ({ db: null as unknown }));
 vi.mock("@/lib/db/index", () => ({ getDb: () => holder.db }));
 vi.mock("@clerk/nextjs/server", () => ({ auth: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+// The Clerk org member list is stubbed; linkPersonAction validates against it.
+vi.mock("@/lib/clerk/members", () => ({ listOrgMembers: vi.fn() }));
 
 import { auth } from "@clerk/nextjs/server";
 import * as q from "@/lib/db/queries";
+import { listOrgMembers } from "@/lib/clerk/members";
 import { computeViolations } from "@/lib/scheduler/violations";
 import { linkPersonAction, toggleMyUnavailabilityAction, unlinkPersonAction } from "./actions";
 
 const authMock = auth as unknown as ReturnType<typeof vi.fn>;
+const listOrgMembersMock = listOrgMembers as unknown as ReturnType<typeof vi.fn>;
 
 function stubAuth(value: Record<string, unknown>) {
   authMock.mockResolvedValue(value);
+}
+
+/** Stub the caller's org member list (userId → itself as label). */
+function stubMembers(userIds: string[]) {
+  listOrgMembersMock.mockResolvedValue(userIds.map((userId) => ({ userId, label: userId })));
 }
 
 function form(entries: Record<string, string>): FormData {
@@ -32,6 +41,8 @@ function form(entries: Record<string, string>): FormData {
 }
 
 let db: LibSQLDatabase<typeof schema>;
+let client: Client;
+let dir: string;
 let teamId: number;
 let personId: number;
 
@@ -39,8 +50,8 @@ beforeEach(async () => {
   vi.clearAllMocks();
   // A temp file (not :memory:) so db.transaction() — used by linkPersonToUser —
   // shares one database across connections (see queries.test.ts).
-  const dir = mkdtempSync(path.join(tmpdir(), "synchro-a-"));
-  const client = createClient({ url: `file:${path.join(dir, "test.db")}` });
+  dir = mkdtempSync(path.join(tmpdir(), "synchro-a-"));
+  client = createClient({ url: `file:${path.join(dir, "test.db")}` });
   db = drizzle(client, { schema });
   await migrate(db, { migrationsFolder: "./drizzle" });
   holder.db = db;
@@ -56,6 +67,12 @@ beforeEach(async () => {
   personId = person.id;
 });
 
+afterEach(() => {
+  // Release the on-disk handle and drop the temp DB so tests don't accumulate files.
+  client.close();
+  rmSync(dir, { recursive: true, force: true });
+});
+
 async function clerkUserIdOf(id: number): Promise<string | null> {
   const row = (await db.select().from(schema.people).where(eq(schema.people.id, id)))[0];
   return row.clerkUserId;
@@ -64,8 +81,18 @@ async function clerkUserIdOf(id: number): Promise<string | null> {
 describe("linkPersonAction", () => {
   it("links a person to a clerk user when the caller is an admin", async () => {
     stubAuth({ userId: "admin_1", orgId: "org_A", orgRole: "org:admin" });
+    stubMembers(["user_1"]);
     await linkPersonAction(form({ personId: String(personId), clerkUserId: "user_1" }));
     expect(await clerkUserIdOf(personId)).toBe("user_1");
+  });
+
+  it("rejects a clerkUserId that is not a member of the caller's org", async () => {
+    stubAuth({ userId: "admin_1", orgId: "org_A", orgRole: "org:admin" });
+    stubMembers(["user_1"]); // the org's real members — "user_ghost" is not among them
+    await expect(
+      linkPersonAction(form({ personId: String(personId), clerkUserId: "user_ghost" })),
+    ).rejects.toThrow();
+    expect(await clerkUserIdOf(personId)).toBeNull();
   });
 
   it("rejects a member (non-admin)", async () => {
@@ -94,6 +121,7 @@ describe("linkPersonAction", () => {
       .returning();
 
     stubAuth({ userId: "admin_1", orgId: "org_A", orgRole: "org:admin" });
+    stubMembers(["user_9"]); // valid org member, so we exercise the team-scoping, not the membership check
     await linkPersonAction(form({ personId: String(foreign.id), clerkUserId: "user_9" }));
 
     // The foreign person is untouched (team-scoped no-op, no cross-tenant write).
@@ -167,6 +195,18 @@ describe("toggleMyUnavailabilityAction", () => {
     // No personId in the form — must throw, not fall through to a write.
     await expect(
       toggleMyUnavailabilityAction(form({ date: "2026-07-14", unavailable: "1" })),
+    ).rejects.toThrow();
+    expect(await q.listConstraintsForWeek(teamId, "2026-07-12")).toHaveLength(0);
+  });
+
+  it("refuses an inactive linked member (server-side, not just UI)", async () => {
+    await linkDana();
+    await db.update(schema.people).set({ active: false }).where(eq(schema.people.id, personId));
+    stubAuth({ userId: "user_1", orgId: "org_A", orgRole: "org:member" });
+    await expect(
+      toggleMyUnavailabilityAction(
+        form({ personId: String(personId), date: "2026-07-14", unavailable: "1" }),
+      ),
     ).rejects.toThrow();
     expect(await q.listConstraintsForWeek(teamId, "2026-07-12")).toHaveLength(0);
   });

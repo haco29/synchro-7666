@@ -164,6 +164,18 @@ export async function unlinkPerson(teamId: number, personId: number): Promise<vo
     .where(and(eq(people.id, personId), eq(people.teamId, teamId)));
 }
 
+/** Whether a team's person is active. False for an unknown/foreign person. */
+export async function isPersonActive(teamId: number, personId: number): Promise<boolean> {
+  const row = (
+    await getDb()
+      .select({ active: people.active })
+      .from(people)
+      .where(and(eq(people.id, personId), eq(people.teamId, teamId)))
+      .limit(1)
+  )[0];
+  return row?.active ?? false;
+}
+
 /**
  * The team's person linked to a Clerk user, or undefined if none. Team-scoped:
  * a link resolves only within its own team. This is how a member's own person is

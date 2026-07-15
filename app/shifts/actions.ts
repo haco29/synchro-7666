@@ -3,9 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireAdmin, requireLinkedMember } from "@/lib/auth";
+import { listOrgMembers } from "@/lib/clerk/members";
 import {
   addPerson,
   historyBefore,
+  isPersonActive,
   isWeekPublished,
   linkPersonToUser,
   listConstraintsForWeek,
@@ -98,6 +100,12 @@ export async function linkPersonAction(formData: FormData) {
   const { teamId } = await requireAdmin();
   const personId = requireId(formData.get("personId"));
   const clerkUserId = requireNonEmpty(formData.get("clerkUserId"), "clerkUserId");
+  // The dropdown lists only org members, but the action is POST-reachable — so
+  // verify the id really belongs to the caller's org before linking.
+  const members = await listOrgMembers();
+  if (!members.some((m) => m.userId === clerkUserId)) {
+    throw new Error("clerkUserId is not a member of this organization");
+  }
   await linkPersonToUser(teamId, personId, clerkUserId);
   revalidatePath("/shifts", "layout");
 }
@@ -131,6 +139,11 @@ export async function toggleMyUnavailabilityAction(formData: FormData) {
   const { teamId, personId } = await requireLinkedMember();
   if (requireId(formData.get("personId")) !== personId) {
     throw new Error("Cannot edit another person's availability");
+  }
+  // Inactive members are off the roster — the UI disables this, but the action
+  // is POST-reachable, so enforce it server-side too.
+  if (!(await isPersonActive(teamId, personId))) {
+    throw new Error("Inactive member cannot edit availability");
   }
   await setUnavailable(
     teamId,
