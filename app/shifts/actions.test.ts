@@ -81,6 +81,24 @@ describe("linkPersonAction", () => {
     await expect(linkPersonAction(form({ personId: String(personId) }))).rejects.toThrow();
     expect(await clerkUserIdOf(personId)).toBeNull();
   });
+
+  it("cannot link a person that belongs to another team (tenancy at the action)", async () => {
+    // A person in a different team; the admin of org_A must not be able to link them.
+    const [teamB] = await db
+      .insert(schema.teams)
+      .values({ name: "Team B", clerkOrgId: "org_B" })
+      .returning();
+    const [foreign] = await db
+      .insert(schema.people)
+      .values({ teamId: teamB.id, name: "Bella" })
+      .returning();
+
+    stubAuth({ userId: "admin_1", orgId: "org_A", orgRole: "org:admin" });
+    await linkPersonAction(form({ personId: String(foreign.id), clerkUserId: "user_9" }));
+
+    // The foreign person is untouched (team-scoped no-op, no cross-tenant write).
+    expect(await clerkUserIdOf(foreign.id)).toBeNull();
+  });
 });
 
 describe("unlinkPersonAction", () => {
@@ -139,6 +157,16 @@ describe("toggleMyUnavailabilityAction", () => {
       toggleMyUnavailabilityAction(
         form({ personId: String(roni.id), date: "2026-07-14", unavailable: "1" }),
       ),
+    ).rejects.toThrow();
+    expect(await q.listConstraintsForWeek(teamId, "2026-07-12")).toHaveLength(0);
+  });
+
+  it("rejects a missing personId fail-closed (linked member)", async () => {
+    await linkDana();
+    stubAuth({ userId: "user_1", orgId: "org_A", orgRole: "org:member" });
+    // No personId in the form — must throw, not fall through to a write.
+    await expect(
+      toggleMyUnavailabilityAction(form({ date: "2026-07-14", unavailable: "1" })),
     ).rejects.toThrow();
     expect(await q.listConstraintsForWeek(teamId, "2026-07-12")).toHaveLength(0);
   });

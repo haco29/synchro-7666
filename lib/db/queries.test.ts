@@ -116,6 +116,21 @@ describe("linking people to Clerk users", () => {
     expect(p.clerkUserId).toBeNull();
   });
 
+  it("does not clear or steal a link held in another team (tenancy)", async () => {
+    await q.addPerson(teamA, "Alice");
+    await q.addPerson(teamB, "Bella");
+    const alice = (await q.listPeople(teamA))[0];
+    const bella = (await q.listPeople(teamB))[0];
+    await q.linkPersonToUser(teamB, bella.id, "user_1");
+
+    // Team A tries to grab the same Clerk user id (e.g. a crafted POST).
+    await q.linkPersonToUser(teamA, alice.id, "user_1");
+
+    // Team B keeps its link; Team A's grab is refused — no cross-tenant write.
+    expect(await q.personForUser(teamB, "user_1")).toBe(bella.id);
+    expect(await q.personForUser(teamA, "user_1")).toBeUndefined();
+  });
+
   it("resolves a clerk user to their linked person, scoped to the team", async () => {
     await q.addPerson(teamA, "Alice");
     const alice = (await q.listPeople(teamA))[0];

@@ -120,9 +120,12 @@ export async function listPeopleWithUserLinks(teamId: number): Promise<PersonWit
 
 /**
  * Link a team's person to a Clerk user (admin-set). Team-scoped: a person from
- * another team is a no-op. `clerk_user_id` is globally unique, so we clear the
- * id from any prior holder first — relinking a user moves the link
- * (last-write-wins) rather than failing the unique constraint.
+ * another team is a no-op. Relinking within the team moves the link
+ * (last-write-wins) — we clear the id from any prior holder *in this team* first.
+ *
+ * `clerk_user_id` is globally unique, so if the id is already linked in *another*
+ * team the set hits the unique index; we treat that as a refusal (no-op) rather
+ * than clearing a cross-tenant link — never trust a client-supplied id.
  */
 export async function linkPersonToUser(
   teamId: number,
@@ -139,13 +142,18 @@ export async function linkPersonToUser(
   )[0];
   if (!target) return;
 
-  await db.transaction(async (tx) => {
-    await tx
-      .update(people)
-      .set({ clerkUserId: null })
-      .where(eq(people.clerkUserId, clerkUserId));
-    await tx.update(people).set({ clerkUserId }).where(eq(people.id, personId));
-  });
+  try {
+    await db.transaction(async (tx) => {
+      await tx
+        .update(people)
+        .set({ clerkUserId: null })
+        .where(and(eq(people.clerkUserId, clerkUserId), eq(people.teamId, teamId)));
+      await tx.update(people).set({ clerkUserId }).where(eq(people.id, personId));
+    });
+  } catch (e) {
+    // Id is already linked to a person in another team — refuse, don't steal it.
+    if (!isUniqueViolation(e)) throw e;
+  }
 }
 
 /** Clear a team's person's Clerk link. Team-scoped; foreign person is a no-op. */

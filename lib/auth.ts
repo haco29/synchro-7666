@@ -112,6 +112,13 @@ export async function isAdmin(): Promise<boolean> {
   return orgRole === "org:admin";
 }
 
+/** The caller's team and their linked person id (undefined if unlinked). */
+async function callerTeamAndPerson(): Promise<{ teamId: number; personId?: number }> {
+  const { userId, orgId } = await requireOrg();
+  const teamId = await resolveTeamId(getDb(), orgId);
+  return { teamId, personId: await personForUser(teamId, userId) };
+}
+
 /**
  * The `people.id` linked to the caller's Clerk user in their active team, or
  * null if this member isn't linked to a person yet. For role-aware *rendering*
@@ -119,9 +126,8 @@ export async function isAdmin(): Promise<boolean> {
  * never supplies it.
  */
 export async function currentPersonId(): Promise<number | null> {
-  const { userId, orgId } = await requireOrg();
-  const teamId = await resolveTeamId(getDb(), orgId);
-  return (await personForUser(teamId, userId)) ?? null;
+  const { personId } = await callerTeamAndPerson();
+  return personId ?? null;
 }
 
 /**
@@ -131,9 +137,7 @@ export async function currentPersonId(): Promise<number | null> {
  * caller's own `personId` — never trust a `personId` from the form.
  */
 export async function requireLinkedMember(): Promise<{ teamId: number; personId: number }> {
-  const { userId, orgId } = await requireOrg();
-  const teamId = await resolveTeamId(getDb(), orgId);
-  const personId = await personForUser(teamId, userId);
+  const { teamId, personId } = await callerTeamAndPerson();
   if (personId === undefined) throw new AuthError("No linked person for this member");
   return { teamId, personId };
 }

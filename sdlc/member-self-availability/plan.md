@@ -92,6 +92,7 @@ deploy (Phase 4) folded into whichever lands last. Recommend one PR unless revie
 - [x] /spec completed
 - [x] /plan completed
 - [x] /build completed (Tasks 0–8 + Task 9 docs; hosted migrate + deploy pending user — touches production)
-- [ ] /test
-- [ ] /review
-- [ ] /code-simplify
+- [x] /test completed (2 Prove-It hardening tests: fail-closed member toggle + action-level link tenancy; own-person guard mutation-verified; 85 green)
+- [x] /review completed (5-axis; 1 Important: cross-team write in linkPersonToUser [queries.ts:146] — clear-prior-holder not team-scoped; 3 suggestions. No critical.)
+  - **I-1 FIXED** (Prove-It): team-scoped the clear + catch global-unique so a crafted cross-team `clerkUserId` fails closed (no steal). New query test "does not clear or steal a link held in another team"; within-team relink regression intact; 86 green. S-1/S-3 left as accepted; S-2 partially eased in /code-simplify.
+- [x] /code-simplify completed (extracted `callerTeamAndPerson()` in auth.ts to de-dup the currentPersonId/requireLinkedMember preamble; de-nested the member-view `me` lookup in people/page.tsx; behavior-preserving, 85 green. Did NOT touch I-1 — that's a behavior fix, still open.)

@@ -78,7 +78,8 @@ export default async function PeoplePage({
   // Members manage only their own availability; unlinked members are read-only.
   if (!admin) {
     const myId = await currentPersonId();
-    const me = myId === null ? null : (await listPeopleWithUserLinks(teamId)).find((p) => p.id === myId) ?? null;
+    const roster = myId === null ? [] : await listPeopleWithUserLinks(teamId);
+    const me = roster.find((p) => p.id === myId) ?? null;
     return (
       <MemberView
         weekStart={weekStart}

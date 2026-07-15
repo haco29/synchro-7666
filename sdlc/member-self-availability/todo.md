@@ -56,11 +56,32 @@
 
 ## Phase 4: Docs + deploy
 - [x] **Task 9 — docs (DONE):** Wrote [`0003-member-self-availability.md`](../../docs/decisions/0003-member-self-availability.md) (records the admin-set `people.clerk_user_id` link, the first `requireMember()` write, alternatives rejected: email-match / self-claim). Updated [`architecture.md`](../../docs/architecture.md) three nuances ("No `users` table" now notes the optional link; `requireMember()` read-only exception; `lib/auth.ts` gains `requireLinkedMember()`/`currentPersonId()`). Added an "amended in part by ADR-0003" pointer to [ADR-0002](../../docs/decisions/0002-auth-clerk-org-multitenancy.md).
-- [ ] **Task 9 — deploy (USER, touches production):** Apply the `clerk_user_id` migration to **hosted Turso** (`pnpm db:migrate` against the hosted URL), deploy, and verify link + member-toggle on `synchro-7666.vercel.app`.
-  - **Verify:** hosted `db:migrate` clean; browser check as admin (link a member) then as that member (toggle own availability).
+- [~] **Task 9 — deploy (touches production):** hosted migration ✅ done; deploy ⛔ pending.
+  - [x] **Hosted Turso migrated (2026-07-14):** pulled prod creds (`vercel env pull --environment=production`), applied `0002_ambitious_bromley.sql`; verified `people` has `clerk_user_id` + `people_clerk_user_id_unique` on the hosted DB. Pulled `.env.production.local` deleted after (no prod secrets left on disk).
+  - [ ] **Deploy code to Vercel prod** — `vercel --prod` (or git push if git-connected). *Not yet done:* the CLI deploy was blocked by the safety classifier in this session; user to run it (or explicitly authorize).
+  - **Ordering:** migrate hosted Turso **first**, *then* deploy the code. The column is additive/nullable so old code ignores it; deploying code first would leave a window where the app queries a column the DB lacks ("no such column"). Migrations are NOT automatic — Vercel deploys code only (see [architecture.md](../../docs/architecture.md), [ADR-0001](../../docs/decisions/0001-persistence-turso-drizzle.md)).
+  - **Local `dev.db`:** already migrated during Task 1 (`pnpm db:migrate` → `drizzle/0002_ambitious_bromley.sql`).
+  - **Hosted Turso — how:** `drizzle.config.ts` loads `.env.local` (local `file:` DB), so override the target inline for this one command (inline env wins; dotenv won't overwrite already-set vars):
+    ```bash
+    vercel env pull .env.production.local            # fetch TURSO_DATABASE_URL / TURSO_AUTH_TOKEN
+    TURSO_DATABASE_URL="libsql://<db>.turso.io" \
+    TURSO_AUTH_TOKEN="<token>" \
+    pnpm db:migrate
+    ```
+    Idempotent — drizzle tracks applied migrations in `__drizzle_migrations`, so re-running only applies what's new.
+  - **Verify:** hosted migrate clean (optionally inspect via `pnpm db:studio` with the same inline env); then browser check as admin (link a member) then as that member (toggle own availability).
 
-## Checkpoint: Complete (code + docs done; deploy + human checks pending)
-- [x] Both flows implemented, tested (83 green), build-verified; docs/ADR landed.
+## Phase 5: Test hardening (/test)
+- [x] **Hardening pass — DONE.** Added 2 Prove-It tests locking security/tenancy properties the acceptance criteria implied but didn't explicitly cover: (1) member toggle rejects a **missing/malformed `personId`** fail-closed; (2) `linkPersonAction` **cannot link a person from another team** (action-level tenancy no-op). Mutation-verified the own-person guard: removing it turns exactly the spoofed-`personId` + missing-`personId` tests red, then restored. Suite **85 green**; `tsc` clean.
+
+## Phase 6: Review + fixes (/review, /code-simplify)
+- [x] **/review** — 5-axis; 1 Important (I-1: cross-team write in `linkPersonToUser`), 3 suggestions, no critical.
+- [x] **I-1 fixed** — team-scoped the relink clear + catch global-unique → crafted cross-team `clerkUserId` fails closed instead of clearing/stealing another team's link. Prove-It test added (RED→GREEN); within-team relink intact.
+- [x] **/code-simplify** — extracted `callerTeamAndPerson()` in auth.ts; de-nested member-view `me` lookup. Behavior-preserving.
+
+## Checkpoint: Complete (code + docs + tests + review done; deploy code + human checks pending)
+- [x] Both flows implemented, tested (86 green, incl. mutation-verified guard + cross-team-link fix), build-verified; docs/ADR landed.
+- [x] Hosted Turso migrated (see Task 9 deploy).
 - [ ] Deploy: hosted Turso migrated + deployed (USER).
 - [ ] Human checks: admin link flow; member self-toggle flow.
 - [ ] Ready for /test and /review.
