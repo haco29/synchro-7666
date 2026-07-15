@@ -11,7 +11,16 @@ vi.mock("./db/index", () => ({ getDb: () => holder.db }));
 vi.mock("@clerk/nextjs/server", () => ({ auth: vi.fn() }));
 
 import { auth } from "@clerk/nextjs/server";
-import { AuthError, currentTeam, requireAdmin, requireMember, resolveTeamId } from "./auth";
+import {
+  AuthError,
+  currentPersonId,
+  currentTeam,
+  isAdmin,
+  requireAdmin,
+  requireLinkedMember,
+  requireMember,
+  resolveTeamId,
+} from "./auth";
 
 async function freshDb() {
   const client = createClient({ url: ":memory:" });
@@ -123,5 +132,64 @@ describe("role guards", () => {
   it("requireMember throws when signed out", async () => {
     stubAuth({ userId: null, orgId: null });
     await expect(requireMember()).rejects.toBeInstanceOf(AuthError);
+  });
+
+  it("isAdmin is true for org:admin, false for a member", async () => {
+    stubAuth({ userId: "user_1", orgId: "org_A", orgRole: "org:admin" });
+    await expect(isAdmin()).resolves.toBe(true);
+    stubAuth({ userId: "user_2", orgId: "org_A", orgRole: "org:member" });
+    await expect(isAdmin()).resolves.toBe(false);
+  });
+
+  it("isAdmin throws when there is no active org", async () => {
+    stubAuth({ userId: "user_1", orgId: null });
+    await expect(isAdmin()).rejects.toBeInstanceOf(AuthError);
+  });
+});
+
+describe("linked-member resolution", () => {
+  // Seeds a team linked to org_A with a person optionally linked to a clerk user.
+  async function seedTeamWithPerson(clerkUserId: string | null): Promise<number> {
+    const [team] = await db
+      .insert(schema.teams)
+      .values({ name: "Team A", clerkOrgId: "org_A" })
+      .returning();
+    const [person] = await db
+      .insert(schema.people)
+      .values({ teamId: team.id, name: "Dana", clerkUserId })
+      .returning();
+    return person.id;
+  }
+
+  it("currentPersonId returns the caller's linked person", async () => {
+    const personId = await seedTeamWithPerson("user_1");
+    stubAuth({ userId: "user_1", orgId: "org_A", orgRole: "org:member" });
+    await expect(currentPersonId()).resolves.toBe(personId);
+  });
+
+  it("currentPersonId returns null for an unlinked member", async () => {
+    await seedTeamWithPerson(null);
+    stubAuth({ userId: "user_1", orgId: "org_A", orgRole: "org:member" });
+    await expect(currentPersonId()).resolves.toBeNull();
+  });
+
+  it("requireLinkedMember returns team + person for a linked member", async () => {
+    const personId = await seedTeamWithPerson("user_1");
+    stubAuth({ userId: "user_1", orgId: "org_A", orgRole: "org:member" });
+    await expect(requireLinkedMember()).resolves.toEqual({
+      teamId: expect.any(Number),
+      personId,
+    });
+  });
+
+  it("requireLinkedMember throws for an unlinked member", async () => {
+    await seedTeamWithPerson(null);
+    stubAuth({ userId: "user_1", orgId: "org_A", orgRole: "org:member" });
+    await expect(requireLinkedMember()).rejects.toBeInstanceOf(AuthError);
+  });
+
+  it("requireLinkedMember throws when signed out", async () => {
+    stubAuth({ userId: null, orgId: null });
+    await expect(requireLinkedMember()).rejects.toBeInstanceOf(AuthError);
   });
 });

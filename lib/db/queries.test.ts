@@ -78,6 +78,72 @@ describe("people", () => {
   });
 });
 
+describe("linking people to Clerk users", () => {
+  it("links a person to a clerk user and surfaces it in the admin listing", async () => {
+    await q.addPerson(teamA, "Alice");
+    const alice = (await q.listPeople(teamA))[0];
+    await q.linkPersonToUser(teamA, alice.id, "user_1");
+    const linked = (await q.listPeopleWithUserLinks(teamA)).find((p) => p.id === alice.id)!;
+    expect(linked.clerkUserId).toBe("user_1");
+  });
+
+  it("unlinks a person (clears the clerk user id)", async () => {
+    await q.addPerson(teamA, "Alice");
+    const alice = (await q.listPeople(teamA))[0];
+    await q.linkPersonToUser(teamA, alice.id, "user_1");
+    await q.unlinkPerson(teamA, alice.id);
+    const p = (await q.listPeopleWithUserLinks(teamA)).find((x) => x.id === alice.id)!;
+    expect(p.clerkUserId).toBeNull();
+  });
+
+  it("relinking a clerk user moves the link (last-write-wins)", async () => {
+    await q.addPerson(teamA, "Alice");
+    await q.addPerson(teamA, "Bob");
+    const [alice, bob] = await q.listPeople(teamA, true);
+    await q.linkPersonToUser(teamA, alice.id, "user_1");
+    await q.linkPersonToUser(teamA, bob.id, "user_1");
+    const people = await q.listPeopleWithUserLinks(teamA);
+    expect(people.find((p) => p.id === alice.id)!.clerkUserId).toBeNull();
+    expect(people.find((p) => p.id === bob.id)!.clerkUserId).toBe("user_1");
+  });
+
+  it("does not link a person from another team", async () => {
+    await q.addPerson(teamB, "Bella");
+    const bella = (await q.listPeople(teamB))[0];
+    // teamA cannot link teamB's person — must be a no-op.
+    await q.linkPersonToUser(teamA, bella.id, "user_1");
+    const p = (await q.listPeopleWithUserLinks(teamB)).find((x) => x.id === bella.id)!;
+    expect(p.clerkUserId).toBeNull();
+  });
+
+  it("does not clear or steal a link held in another team (tenancy)", async () => {
+    await q.addPerson(teamA, "Alice");
+    await q.addPerson(teamB, "Bella");
+    const alice = (await q.listPeople(teamA))[0];
+    const bella = (await q.listPeople(teamB))[0];
+    await q.linkPersonToUser(teamB, bella.id, "user_1");
+
+    // Team A tries to grab the same Clerk user id (e.g. a crafted POST).
+    await q.linkPersonToUser(teamA, alice.id, "user_1");
+
+    // Team B keeps its link; Team A's grab is refused — no cross-tenant write.
+    expect(await q.personForUser(teamB, "user_1")).toBe(bella.id);
+    expect(await q.personForUser(teamA, "user_1")).toBeUndefined();
+  });
+
+  it("resolves a clerk user to their linked person, scoped to the team", async () => {
+    await q.addPerson(teamA, "Alice");
+    const alice = (await q.listPeople(teamA))[0];
+    await q.linkPersonToUser(teamA, alice.id, "user_1");
+
+    expect(await q.personForUser(teamA, "user_1")).toBe(alice.id);
+    // Unlinked user in the team → undefined.
+    expect(await q.personForUser(teamA, "user_x")).toBeUndefined();
+    // The link does not resolve under another team.
+    expect(await q.personForUser(teamB, "user_1")).toBeUndefined();
+  });
+});
+
 describe("constraints (unavailable dates)", () => {
   it("stores and clears unavailability within the week window", async () => {
     await q.addPerson(teamA, "Alice");

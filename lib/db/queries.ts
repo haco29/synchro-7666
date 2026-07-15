@@ -101,6 +101,100 @@ export async function setPersonActive(
     .where(and(eq(people.id, id), eq(people.teamId, teamId)));
 }
 
+/** A person plus their Clerk link — for the admin roster/linking UI only. */
+export type PersonWithLink = Person & { clerkUserId: string | null };
+
+/** Full roster (incl. inactive) with each person's Clerk link, for admins. */
+export async function listPeopleWithUserLinks(teamId: number): Promise<PersonWithLink[]> {
+  return getDb()
+    .select({
+      id: people.id,
+      name: people.name,
+      active: people.active,
+      clerkUserId: people.clerkUserId,
+    })
+    .from(people)
+    .where(eq(people.teamId, teamId))
+    .orderBy(asc(people.name));
+}
+
+/**
+ * Link a team's person to a Clerk user (admin-set). Team-scoped: a person from
+ * another team is a no-op. Relinking within the team moves the link
+ * (last-write-wins) — we clear the id from any prior holder *in this team* first.
+ *
+ * `clerk_user_id` is globally unique, so if the id is already linked in *another*
+ * team the set hits the unique index; we treat that as a refusal (no-op) rather
+ * than clearing a cross-tenant link — never trust a client-supplied id.
+ */
+export async function linkPersonToUser(
+  teamId: number,
+  personId: number,
+  clerkUserId: string,
+): Promise<void> {
+  const db = getDb();
+  const target = (
+    await db
+      .select({ id: people.id })
+      .from(people)
+      .where(and(eq(people.id, personId), eq(people.teamId, teamId)))
+      .limit(1)
+  )[0];
+  if (!target) return;
+
+  try {
+    await db.transaction(async (tx) => {
+      await tx
+        .update(people)
+        .set({ clerkUserId: null })
+        .where(and(eq(people.clerkUserId, clerkUserId), eq(people.teamId, teamId)));
+      await tx.update(people).set({ clerkUserId }).where(eq(people.id, personId));
+    });
+  } catch (e) {
+    // Id is already linked to a person in another team — refuse, don't steal it.
+    if (!isUniqueViolation(e)) throw e;
+  }
+}
+
+/** Clear a team's person's Clerk link. Team-scoped; foreign person is a no-op. */
+export async function unlinkPerson(teamId: number, personId: number): Promise<void> {
+  await getDb()
+    .update(people)
+    .set({ clerkUserId: null })
+    .where(and(eq(people.id, personId), eq(people.teamId, teamId)));
+}
+
+/** Whether a team's person is active. False for an unknown/foreign person. */
+export async function isPersonActive(teamId: number, personId: number): Promise<boolean> {
+  const row = (
+    await getDb()
+      .select({ active: people.active })
+      .from(people)
+      .where(and(eq(people.id, personId), eq(people.teamId, teamId)))
+      .limit(1)
+  )[0];
+  return row?.active ?? false;
+}
+
+/**
+ * The team's person linked to a Clerk user, or undefined if none. Team-scoped:
+ * a link resolves only within its own team. This is how a member's own person is
+ * derived server-side (see lib/auth.ts) — never from client input.
+ */
+export async function personForUser(
+  teamId: number,
+  clerkUserId: string,
+): Promise<number | undefined> {
+  const row = (
+    await getDb()
+      .select({ id: people.id })
+      .from(people)
+      .where(and(eq(people.teamId, teamId), eq(people.clerkUserId, clerkUserId)))
+      .limit(1)
+  )[0];
+  return row?.id;
+}
+
 // ---- constraints (unavailable dates) ----
 
 export async function listConstraintsForWeek(

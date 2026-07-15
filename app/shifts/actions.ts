@@ -2,11 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdmin, requireLinkedMember } from "@/lib/auth";
+import { listOrgMembers } from "@/lib/clerk/members";
 import {
   addPerson,
   historyBefore,
+  isPersonActive,
   isWeekPublished,
+  linkPersonToUser,
   listConstraintsForWeek,
   listPeople,
   removeAssignment,
@@ -16,6 +19,7 @@ import {
   setUnavailable,
   setWeekPublished,
   swapSeat,
+  unlinkPerson,
 } from "@/lib/db/queries";
 import { generateWeek } from "@/lib/scheduler/generate";
 import type { SlotType } from "@/lib/shifts/types";
@@ -83,6 +87,35 @@ export async function setPersonActiveAction(formData: FormData) {
   revalidatePath("/shifts", "layout");
 }
 
+// ---- person ↔ Clerk user linking (admin only) ----
+
+function requireNonEmpty(value: FormDataEntryValue | null, field: string): string {
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new Error(`Invalid ${field}: ${String(value)}`);
+  }
+  return value.trim();
+}
+
+export async function linkPersonAction(formData: FormData) {
+  const { teamId } = await requireAdmin();
+  const personId = requireId(formData.get("personId"));
+  const clerkUserId = requireNonEmpty(formData.get("clerkUserId"), "clerkUserId");
+  // The dropdown lists only org members, but the action is POST-reachable — so
+  // verify the id really belongs to the caller's org before linking.
+  const members = await listOrgMembers();
+  if (!members.some((m) => m.userId === clerkUserId)) {
+    throw new Error("clerkUserId is not a member of this organization");
+  }
+  await linkPersonToUser(teamId, personId, clerkUserId);
+  revalidatePath("/shifts", "layout");
+}
+
+export async function unlinkPersonAction(formData: FormData) {
+  const { teamId } = await requireAdmin();
+  await unlinkPerson(teamId, requireId(formData.get("personId")));
+  revalidatePath("/shifts", "layout");
+}
+
 // ---- unavailability ----
 
 export async function toggleUnavailableAction(formData: FormData) {
@@ -90,6 +123,31 @@ export async function toggleUnavailableAction(formData: FormData) {
   await setUnavailable(
     teamId,
     requireId(formData.get("personId")),
+    requireDate(formData.get("date")),
+    formData.get("unavailable") === "1",
+  );
+  revalidatePath("/shifts", "layout");
+}
+
+/**
+ * A member toggling *their own* unavailability. The caller's person is resolved
+ * server-side from their Clerk identity (`requireLinkedMember`); the form's
+ * `personId` is only accepted if it matches — a spoofed id is rejected, never
+ * trusted. Unlinked members are refused (requireLinkedMember throws).
+ */
+export async function toggleMyUnavailabilityAction(formData: FormData) {
+  const { teamId, personId } = await requireLinkedMember();
+  if (requireId(formData.get("personId")) !== personId) {
+    throw new Error("Cannot edit another person's availability");
+  }
+  // Inactive members are off the roster — the UI disables this, but the action
+  // is POST-reachable, so enforce it server-side too.
+  if (!(await isPersonActive(teamId, personId))) {
+    throw new Error("Inactive member cannot edit availability");
+  }
+  await setUnavailable(
+    teamId,
+    personId,
     requireDate(formData.get("date")),
     formData.get("unavailable") === "1",
   );

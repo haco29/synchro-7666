@@ -1,7 +1,8 @@
 # ADR-0002: Clerk auth with Organization-based multi-tenancy
 
 ## Status
-Accepted
+Accepted — amended in part by [ADR-0003](0003-member-self-availability.md) (members may edit their
+own availability; `people` may carry a `clerk_user_id`).
 
 ## Date
 2026-07-14

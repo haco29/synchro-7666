@@ -60,6 +60,33 @@ describe("schema (initial migration)", () => {
     ).resolves.not.toThrow();
   });
 
+  it("allows people with no clerk_user_id (unlinked/roster-only)", async () => {
+    const { db } = await freshDb();
+    const [team] = await db.insert(schema.teams).values({ name: "Team A" }).returning();
+
+    // Two unlinked people (NULL clerk_user_id) must coexist — the unique index
+    // must not treat NULLs as colliding.
+    await db.insert(schema.people).values({ teamId: team.id, name: "Dana" });
+    await expect(
+      db.insert(schema.people).values({ teamId: team.id, name: "Roni" }),
+    ).resolves.not.toThrow();
+  });
+
+  it("enforces a unique clerk_user_id (one person per Clerk user)", async () => {
+    const { db } = await freshDb();
+    const [team] = await db.insert(schema.teams).values({ name: "Team A" }).returning();
+
+    await db
+      .insert(schema.people)
+      .values({ teamId: team.id, name: "Dana", clerkUserId: "user_1" });
+
+    await expect(
+      db
+        .insert(schema.people)
+        .values({ teamId: team.id, name: "Roni", clerkUserId: "user_1" }),
+    ).rejects.toThrow();
+  });
+
   it("enforces one week_start per team", async () => {
     const { db } = await freshDb();
     const [team] = await db

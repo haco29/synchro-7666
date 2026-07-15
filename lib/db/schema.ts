@@ -21,6 +21,10 @@ export const people = sqliteTable(
       .references(() => teams.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     active: integer("active", { mode: "boolean" }).notNull().default(true),
+    // Links this schedulable person to a Clerk user (admin-set). NULL = unlinked /
+    // roster-only. Unique so a Clerk user maps to at most one person; SQLite treats
+    // NULLs as distinct, so multiple unlinked people coexist (see lib/auth.ts).
+    clerkUserId: text("clerk_user_id").unique(),
   },
   (t) => [uniqueIndex("people_team_name_unq").on(t.teamId, t.name)],
 );
