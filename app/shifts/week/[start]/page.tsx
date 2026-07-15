@@ -1,12 +1,11 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { generateWeekAction, setPublishedAction } from "../../actions";
 import { FairnessPanel } from "../../_components/fairness-panel";
+import { GenerateScheduleButton } from "../../_components/generate-schedule-button";
 import { SeatEditor } from "../../_components/seat-editor";
 import { WeekNav } from "../../_components/week-nav";
 import { currentTeam } from "@/lib/auth";
 import {
-  isWeekPublished,
   listAssignments,
   listConstraintsForWeek,
   listPeople,
@@ -34,7 +33,6 @@ export default async function WeekPage({
   const assignments = await listAssignments(teamId, weekStart);
   const constraints = await listConstraintsForWeek(teamId, weekStart);
   const violations = computeViolations(assignments, constraints, allPeople);
-  const published = await isWeekPublished(teamId, weekStart);
   const dates = weekDates(weekStart);
   const violationKeys = new Set(violations.map((v) => `${v.date}:${v.slot}:${v.personId}`));
 
@@ -60,31 +58,10 @@ export default async function WeekPage({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <WeekNav weekStart={weekStart} hrefFor={(w) => `/shifts/week/${w}`} />
         <div className="flex items-center gap-2">
-          <form action={generateWeekAction}>
-            <input type="hidden" name="weekStart" value={weekStart} />
-            <button
-              type="submit"
-              disabled={published}
-              title={published ? "Unpublish the week before regenerating" : undefined}
-              className="rounded bg-neutral-900 px-4 py-1.5 text-sm text-white hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-neutral-300"
-            >
-              {assignments.length > 0 ? "Regenerate" : "Generate"} schedule
-            </button>
-          </form>
-          <form action={setPublishedAction}>
-            <input type="hidden" name="weekStart" value={weekStart} />
-            <input type="hidden" name="published" value={published ? "0" : "1"} />
-            <button
-              type="submit"
-              className={`rounded border px-4 py-1.5 text-sm ${
-                published
-                  ? "border-green-500 text-green-600 dark:text-green-400"
-                  : "border-neutral-300 hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
-              }`}
-            >
-              {published ? "Published ✓ (click to unpublish)" : "Publish"}
-            </button>
-          </form>
+          <GenerateScheduleButton
+            weekStart={weekStart}
+            isRegenerate={assignments.length > 0}
+          />
         </div>
       </div>
 

@@ -23,6 +23,7 @@ import { computeViolations } from "@/lib/scheduler/violations";
 import {
   blockMyWeekAction,
   blockWeekAction,
+  generateWeekAction,
   linkPersonAction,
   toggleMyShiftUnavailabilityAction,
   toggleMyUnavailabilityAction,
@@ -417,5 +418,19 @@ describe("blockMyWeekAction (member self)", () => {
       blockMyWeekAction(form({ personId: String(personId), weekStart: "2026-07-12", blocked: "1" })),
     ).rejects.toThrow();
     expect(await q.listConstraintsForWeek(teamId, "2026-07-12")).toHaveLength(0);
+  });
+});
+
+describe("generateWeekAction", () => {
+  // Publish is gone: every edit is live, so regenerate must never be gated by a
+  // week's (now-vestigial) published flag. This guards against the old
+  // `if (await isWeekPublished(...)) return;` early-return sneaking back in.
+  it("generates assignments even when the week is flagged published", async () => {
+    stubAuth({ userId: "admin_1", orgId: "org_A", orgRole: "org:admin" });
+    await q.setWeekPublished(teamId, "2026-07-15", true);
+
+    await generateWeekAction(form({ weekStart: "2026-07-15" }));
+
+    expect((await q.listAssignments(teamId, "2026-07-15")).length).toBeGreaterThan(0);
   });
 });
