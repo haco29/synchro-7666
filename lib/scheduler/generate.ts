@@ -9,12 +9,13 @@ import { SLOT_CAPACITY } from "../shifts/types";
 import { addDays, weekDates } from "../shifts/week";
 
 /**
- * Fill order within each day. Backup (the rest day) is decided first so it
- * rotates by rest history alone, independent of who is busiest; then night
- * (scarcest fairness budget) and kitchen, so the most contested working slots
- * pick from the widest remaining pool.
+ * Fill order within each day. Work roles come first — night (scarcest fairness
+ * budget) and kitchen ahead of morning/evening — so real shifts always take
+ * priority over the rest day. Backup is filled LAST from whoever remains,
+ * scored by rest history so the rest perk still rotates fairly; when a day is
+ * short-staffed it is backup that gaps, never a work shift.
  */
-const FILL_ORDER: SlotType[] = ["backup", "night", "kitchen", "morning", "evening"];
+const FILL_ORDER: SlotType[] = ["night", "kitchen", "morning", "evening", "backup"];
 
 /** Scoring weights: lower score wins the slot. */
 const W_WEEK_TOTAL = 1;

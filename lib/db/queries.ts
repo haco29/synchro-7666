@@ -238,6 +238,18 @@ export async function listConstraintsForWeek(
   }));
 }
 
+/** Tenancy guard for constraint writers: true only if `personId` is on `teamId`. */
+async function personOnTeam(db: Db, teamId: number, personId: number): Promise<boolean> {
+  const row = (
+    await db
+      .select({ id: people.id })
+      .from(people)
+      .where(and(eq(people.id, personId), eq(people.teamId, teamId)))
+      .limit(1)
+  )[0];
+  return row !== undefined;
+}
+
 export async function setUnavailable(
   teamId: number,
   personId: number,
@@ -245,15 +257,7 @@ export async function setUnavailable(
   unavailable: boolean,
 ): Promise<void> {
   const db = getDb();
-  // Tenancy guard: only touch constraints for a person on this team.
-  const person = (
-    await db
-      .select({ id: people.id })
-      .from(people)
-      .where(and(eq(people.id, personId), eq(people.teamId, teamId)))
-      .limit(1)
-  )[0];
-  if (!person) return;
+  if (!(await personOnTeam(db, teamId, personId))) return;
 
   if (unavailable) {
     await db
@@ -287,15 +291,7 @@ export async function setUnavailableShift(
   unavailable: boolean,
 ): Promise<void> {
   const db = getDb();
-  // Tenancy guard: only touch constraints for a person on this team.
-  const person = (
-    await db
-      .select({ id: people.id })
-      .from(people)
-      .where(and(eq(people.id, personId), eq(people.teamId, teamId)))
-      .limit(1)
-  )[0];
-  if (!person) return;
+  if (!(await personOnTeam(db, teamId, personId))) return;
 
   const value = `${date}:${shift}`;
   if (unavailable) {
@@ -329,15 +325,7 @@ export async function setWeekUnavailable(
   blocked: boolean,
 ): Promise<void> {
   const db = getDb();
-  // Tenancy guard: only touch constraints for a person on this team.
-  const person = (
-    await db
-      .select({ id: people.id })
-      .from(people)
-      .where(and(eq(people.id, personId), eq(people.teamId, teamId)))
-      .limit(1)
-  )[0];
-  if (!person) return;
+  if (!(await personOnTeam(db, teamId, personId))) return;
 
   const dates = weekDates(weekStart);
   if (blocked) {

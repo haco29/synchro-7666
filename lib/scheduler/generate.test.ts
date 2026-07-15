@@ -161,6 +161,22 @@ describe("generateWeek", () => {
     assertHardRules(assignments, []);
   });
 
+  it("prioritizes work shifts over backup when short-staffed — gaps land on backup, not work", () => {
+    // 4 people, 5 roles/day. The rest role (backup) is the lowest priority, so
+    // it is what goes unfilled — never a morning/evening/night/kitchen shift.
+    const { assignments, gaps } = generateWeek(input({ people: roster(4) }));
+    for (const date of weekDates(WEEK)) {
+      for (const slot of ["morning", "evening", "night", "kitchen"] as const) {
+        expect(
+          assignments.some((a) => a.date === date && a.slot === slot),
+          `${slot} on ${date} should be staffed`,
+        ).toBe(true);
+      }
+      expect(assignments.some((a) => a.date === date && a.slot === "backup")).toBe(false);
+    }
+    expect(gaps.every((g) => g.slot === "backup")).toBe(true);
+  });
+
   it("reports full-day gaps when everyone is unavailable", () => {
     const people = roster(8);
     const constraints: Constraint[] = people.map((p, i) => ({
@@ -215,6 +231,25 @@ describe("generateWeek", () => {
     const onD = assignments.filter((a) => a.date === D && a.personId === 1);
     expect(onD).toHaveLength(1);
     expect(["kitchen", "backup"]).toContain(onD[0].slot);
+  });
+
+  it("steers backup away from someone already far ahead on rest (history-seeded)", () => {
+    // Backup is zero-weight for work load but balanced on its own history. A
+    // person way ahead on backups must not keep drawing the rest role — even
+    // though a naive weekTotal rule would pick them (their work total is low).
+    const people = roster(6);
+    const history: PersonHistory[] = people.map((p) => ({
+      personId: p.id,
+      nightCount: 0,
+      kitchenCount: 0,
+      backupCount: p.id === 1 ? 100 : 0,
+      totalCount: 0,
+    }));
+    for (let seed = 0; seed < 10; seed++) {
+      const { assignments } = generateWeek(input({ people, history, seed }));
+      const p1Backups = assignments.filter((a) => a.slot === "backup" && a.personId === 1);
+      expect(p1Backups).toHaveLength(0);
+    }
   });
 
   it("blocks a whole-day-off person from every role, including kitchen and backup", () => {

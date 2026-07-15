@@ -141,21 +141,28 @@ export async function toggleUnavailableAction(formData: FormData) {
 }
 
 /**
- * A member toggling *their own* unavailability. The caller's person is resolved
- * server-side from their Clerk identity (`requireLinkedMember`); the form's
- * `personId` is only accepted if it matches — a spoofed id is rejected, never
- * trusted. Unlinked members are refused (requireLinkedMember throws).
+ * Resolve the caller's own person for a self-service availability edit (ADR-0003).
+ * Identity is derived server-side (`requireLinkedMember`); the form's `personId`
+ * is accepted only if it matches — a spoofed id is rejected, never trusted.
+ * Inactive members are refused here too: the UI disables it, but the action is
+ * POST-reachable. Unlinked members are refused (`requireLinkedMember` throws).
  */
-export async function toggleMyUnavailabilityAction(formData: FormData) {
+async function requireOwnEditablePerson(
+  formData: FormData,
+): Promise<{ teamId: number; personId: number }> {
   const { teamId, personId } = await requireLinkedMember();
   if (requireId(formData.get("personId")) !== personId) {
     throw new Error("Cannot edit another person's availability");
   }
-  // Inactive members are off the roster — the UI disables this, but the action
-  // is POST-reachable, so enforce it server-side too.
   if (!(await isPersonActive(teamId, personId))) {
     throw new Error("Inactive member cannot edit availability");
   }
+  return { teamId, personId };
+}
+
+/** A member toggling *their own* whole-day unavailability. */
+export async function toggleMyUnavailabilityAction(formData: FormData) {
+  const { teamId, personId } = await requireOwnEditablePerson(formData);
   await setUnavailable(
     teamId,
     personId,
@@ -177,15 +184,9 @@ export async function toggleShiftUnavailableAction(formData: FormData) {
   revalidatePath("/shifts", "layout");
 }
 
-/** Member editing *their own* per-shift availability — same guard as the whole-day path. */
+/** Member editing *their own* per-shift availability. */
 export async function toggleMyShiftUnavailabilityAction(formData: FormData) {
-  const { teamId, personId } = await requireLinkedMember();
-  if (requireId(formData.get("personId")) !== personId) {
-    throw new Error("Cannot edit another person's availability");
-  }
-  if (!(await isPersonActive(teamId, personId))) {
-    throw new Error("Inactive member cannot edit availability");
-  }
+  const { teamId, personId } = await requireOwnEditablePerson(formData);
   await setUnavailableShift(
     teamId,
     personId,
@@ -207,15 +208,9 @@ export async function blockWeekAction(formData: FormData) {
   revalidatePath("/shifts", "layout");
 }
 
-/** Member blocking/clearing *their own* whole week — same guard as the other self paths. */
+/** Member blocking/clearing *their own* whole week. */
 export async function blockMyWeekAction(formData: FormData) {
-  const { teamId, personId } = await requireLinkedMember();
-  if (requireId(formData.get("personId")) !== personId) {
-    throw new Error("Cannot edit another person's availability");
-  }
-  if (!(await isPersonActive(teamId, personId))) {
-    throw new Error("Inactive member cannot edit availability");
-  }
+  const { teamId, personId } = await requireOwnEditablePerson(formData);
   await setWeekUnavailable(
     teamId,
     personId,
