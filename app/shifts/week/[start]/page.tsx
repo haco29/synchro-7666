@@ -14,7 +14,7 @@ import {
 import { computeViolations } from "@/lib/scheduler/violations";
 import type { Assignment, SlotType } from "@/lib/shifts/types";
 import { SLOT_CAPACITY, SLOT_LABELS, SLOT_TYPES } from "@/lib/shifts/types";
-import { dayLabel, isIsoDate, sundayOf, weekDates } from "@/lib/shifts/week";
+import { dayLabel, isIsoDate, weekDates, weekStartOf } from "@/lib/shifts/week";
 
 export const metadata = { title: "Week · Shifts" };
 
@@ -25,7 +25,7 @@ export default async function WeekPage({
 }) {
   const { start } = await params;
   if (!isIsoDate(start)) notFound();
-  const weekStart = sundayOf(start);
+  const weekStart = weekStartOf(start);
   // Canonicalize so each week has exactly one URL.
   if (start !== weekStart) redirect(`/shifts/week/${weekStart}`);
   const teamId = await currentTeam();

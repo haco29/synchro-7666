@@ -24,7 +24,7 @@ import {
 import { generateWeek } from "@/lib/scheduler/generate";
 import type { SlotType } from "@/lib/shifts/types";
 import { SLOT_TYPES } from "@/lib/shifts/types";
-import { isIsoDate, sundayOf } from "@/lib/shifts/week";
+import { isIsoDate, weekStartOf } from "@/lib/shifts/week";
 
 // Server Actions are directly POSTable, so every input is validated here —
 // the forms rendering them are not a trust boundary.
@@ -52,14 +52,14 @@ function requireSlot(value: FormDataEntryValue | null): SlotType {
   return slot;
 }
 
-/** A date plus the Sunday of the week it must belong to. */
+/** A date plus the week-start (Wednesday) of the week it must belong to. */
 function requireWeekDate(
   weekValue: FormDataEntryValue | null,
   dateValue: FormDataEntryValue | null,
 ): { weekStart: string; date: string } {
   const weekStart = requireDate(weekValue);
   const date = requireDate(dateValue);
-  if (sundayOf(date) !== weekStart) {
+  if (weekStartOf(date) !== weekStart) {
     throw new Error(`Date ${date} is not in the week of ${weekStart}`);
   }
   return { weekStart, date };
@@ -198,7 +198,7 @@ export async function clearSlotAction(formData: FormData) {
   const { teamId } = await requireAdmin();
   const date = requireDate(formData.get("date"));
   const slot = requireSlot(formData.get("slot"));
-  await removeAssignment(teamId, sundayOf(date), {
+  await removeAssignment(teamId, weekStartOf(date), {
     date,
     slot,
     personId: requireId(formData.get("personId")),

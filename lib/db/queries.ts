@@ -1,9 +1,16 @@
-import { and, asc, desc, eq, gte, lt, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import type { LibSQLDatabase } from "drizzle-orm/libsql";
 import { getDb } from "./index";
 import { assignments, constraints, people, weeks } from "./schema";
 import * as schema from "./schema";
-import type { Assignment, Constraint, Person, PersonHistory, SlotType } from "../shifts/types";
+import type {
+  Assignment,
+  Constraint,
+  Person,
+  PersonHistory,
+  ShiftType,
+  SlotType,
+} from "../shifts/types";
 import { addDays } from "../shifts/week";
 
 type Db = LibSQLDatabase<typeof schema>;
@@ -201,7 +208,11 @@ export async function listConstraintsForWeek(
   teamId: number,
   weekStart: string,
 ): Promise<Constraint[]> {
-  const weekEnd = addDays(weekStart, 6);
+  // Exclusive upper bound at the next week's start: both a plain date and a
+  // `YYYY-MM-DD:<shift>` value for any day in [weekStart, weekStart+6] sort
+  // below it, so last-day per-shift rows aren't dropped (an inclusive weekEnd
+  // bound would, since "…-18:night" > "…-18").
+  const nextWeekStart = addDays(weekStart, 7);
   const rows = await getDb()
     .select({
       id: constraints.id,
@@ -214,9 +225,9 @@ export async function listConstraintsForWeek(
     .where(
       and(
         eq(people.teamId, teamId),
-        eq(constraints.kind, "unavailable_date"),
+        inArray(constraints.kind, ["unavailable_date", "unavailable_shift"]),
         gte(constraints.value, weekStart),
-        lte(constraints.value, weekEnd),
+        lt(constraints.value, nextWeekStart),
       ),
     );
   return rows.map((r) => ({
@@ -257,6 +268,49 @@ export async function setUnavailable(
           eq(constraints.personId, personId),
           eq(constraints.kind, "unavailable_date"),
           eq(constraints.value, date),
+        ),
+      );
+  }
+}
+
+/**
+ * Toggle a person's unavailability for a single time-shift on one date. Unlike
+ * `setUnavailable` (whole day), this blocks only the given shift — the person
+ * stays eligible for the other shifts, kitchen, and backup. Value is stored as
+ * `YYYY-MM-DD:<shift>`.
+ */
+export async function setUnavailableShift(
+  teamId: number,
+  personId: number,
+  date: string,
+  shift: ShiftType,
+  unavailable: boolean,
+): Promise<void> {
+  const db = getDb();
+  // Tenancy guard: only touch constraints for a person on this team.
+  const person = (
+    await db
+      .select({ id: people.id })
+      .from(people)
+      .where(and(eq(people.id, personId), eq(people.teamId, teamId)))
+      .limit(1)
+  )[0];
+  if (!person) return;
+
+  const value = `${date}:${shift}`;
+  if (unavailable) {
+    await db
+      .insert(constraints)
+      .values({ personId, kind: "unavailable_shift", value })
+      .onConflictDoNothing();
+  } else {
+    await db
+      .delete(constraints)
+      .where(
+        and(
+          eq(constraints.personId, personId),
+          eq(constraints.kind, "unavailable_shift"),
+          eq(constraints.value, value),
         ),
       );
   }
@@ -422,6 +476,7 @@ export async function historyBefore(
       personId: assignments.personId,
       nights: sql<number>`SUM(CASE WHEN ${assignments.slot} = 'night' THEN 1 ELSE 0 END)`,
       kitchens: sql<number>`SUM(CASE WHEN ${assignments.slot} = 'kitchen' THEN 1 ELSE 0 END)`,
+      backups: sql<number>`SUM(CASE WHEN ${assignments.slot} = 'backup' THEN 1 ELSE 0 END)`,
       total: sql<number>`COUNT(*)`,
     })
     .from(assignments)
@@ -432,6 +487,7 @@ export async function historyBefore(
     personId: r.personId,
     nightCount: Number(r.nights),
     kitchenCount: Number(r.kitchens),
+    backupCount: Number(r.backups),
     totalCount: Number(r.total),
   }));
 }

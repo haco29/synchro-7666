@@ -1,22 +1,24 @@
 export type ShiftType = "morning" | "evening" | "night";
-export type SlotType = ShiftType | "kitchen";
+export type SlotType = ShiftType | "kitchen" | "backup";
 
 export const SHIFT_TYPES: ShiftType[] = ["morning", "evening", "night"];
-export const SLOT_TYPES: SlotType[] = ["morning", "evening", "night", "kitchen"];
+export const SLOT_TYPES: SlotType[] = ["morning", "evening", "night", "kitchen", "backup"];
 
 export const SLOT_LABELS: Record<SlotType, string> = {
   morning: "Morning 07:00–15:00",
   evening: "Evening 15:00–23:00",
   night: "Night 23:00–07:00",
   kitchen: "Kitchen duty",
+  backup: "Backup (rest / on-call)",
 };
 
-/** People needed per slot type per day. */
+/** People needed per slot type per day — one per role. */
 export const SLOT_CAPACITY: Record<SlotType, number> = {
-  morning: 2,
-  evening: 2,
-  night: 2,
+  morning: 1,
+  evening: 1,
+  night: 1,
   kitchen: 1,
+  backup: 1,
 };
 
 export interface Person {
@@ -26,17 +28,21 @@ export interface Person {
 }
 
 /**
- * Only unavailable dates exist in v1. The DB stores kind as free TEXT, so new
- * kinds (blocked shift types, max-per-week, …) are additive — extend this
- * union and wire them through the engine + violations when they land.
+ * Availability constraints. The DB stores kind as free TEXT, so new kinds are
+ * additive — extend this union and wire them through the engine + violations.
+ * - `unavailable_date`: value is an ISO date; the person is off the WHOLE day
+ *   (ineligible for every slot, incl. kitchen and backup).
+ * - `unavailable_shift`: value is `YYYY-MM-DD:<shift>`; the person is off only
+ *   that one time-shift (morning/evening/night) and still eligible for the
+ *   other shifts, kitchen, and backup.
  */
-export type ConstraintKind = "unavailable_date";
+export type ConstraintKind = "unavailable_date" | "unavailable_shift";
 
 export interface Constraint {
   id: number;
   personId: number;
   kind: ConstraintKind;
-  /** ISO date the person cannot work. */
+  /** ISO date (`unavailable_date`) or `YYYY-MM-DD:<shift>` (`unavailable_shift`). */
   value: string;
 }
 
@@ -58,6 +64,8 @@ export interface PersonHistory {
   personId: number;
   nightCount: number;
   kitchenCount: number;
+  /** Times this person has been the backup (rest) — balanced so rest rotates evenly. */
+  backupCount: number;
   totalCount: number;
 }
 

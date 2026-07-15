@@ -9,15 +9,18 @@ import { SLOT_CAPACITY } from "../shifts/types";
 import { addDays, weekDates } from "../shifts/week";
 
 /**
- * Fill order within each day. Night first (scarcest fairness budget), then
- * kitchen, so the most contested slots pick from the widest candidate pool.
+ * Fill order within each day. Backup (the rest day) is decided first so it
+ * rotates by rest history alone, independent of who is busiest; then night
+ * (scarcest fairness budget) and kitchen, so the most contested working slots
+ * pick from the widest remaining pool.
  */
-const FILL_ORDER: SlotType[] = ["night", "kitchen", "morning", "evening"];
+const FILL_ORDER: SlotType[] = ["backup", "night", "kitchen", "morning", "evening"];
 
 /** Scoring weights: lower score wins the slot. */
 const W_WEEK_TOTAL = 1;
 const W_NIGHT_BALANCE = 3;
 const W_KITCHEN_BALANCE = 2;
+const W_BACKUP_BALANCE = 3;
 const W_MORNING_AFTER_NIGHT = 0.75;
 const W_TIEBREAK = 0.01;
 
@@ -50,9 +53,11 @@ export function generateWeek(input: GenerateInput): GenerateResult {
 
   const nightHist = new Map<number, number>();
   const kitchenHist = new Map<number, number>();
+  const backupHist = new Map<number, number>();
   for (const h of input.history) {
     nightHist.set(h.personId, h.nightCount);
     kitchenHist.set(h.personId, h.kitchenCount);
+    backupHist.set(h.personId, h.backupCount);
   }
 
   const weekTotal = new Map<number, number>();
@@ -76,10 +81,16 @@ export function generateWeek(input: GenerateInput): GenerateResult {
           continue;
         }
 
+        const isBackup = slot === "backup";
         let best = candidates[0];
         let bestScore = Infinity;
         for (const p of candidates) {
-          let score = (weekTotal.get(p.id) ?? 0) * W_WEEK_TOTAL;
+          // Backup is a rest day: it never adds to the work-load total, so being
+          // on backup doesn't make a person "look busy". It balances on its own
+          // rest history instead, so the rest perk rotates evenly.
+          let score = isBackup
+            ? (backupHist.get(p.id) ?? 0) * W_BACKUP_BALANCE
+            : (weekTotal.get(p.id) ?? 0) * W_WEEK_TOTAL;
           if (slot === "night") {
             score += (nightHist.get(p.id) ?? 0) * W_NIGHT_BALANCE;
           }
@@ -97,9 +108,13 @@ export function generateWeek(input: GenerateInput): GenerateResult {
         }
 
         assignments.push({ date, slot, personId: best.id });
-        weekTotal.set(best.id, (weekTotal.get(best.id) ?? 0) + 1);
         if (!busyOn.has(date)) busyOn.set(date, new Set());
         busyOn.get(date)!.add(best.id);
+        if (isBackup) {
+          backupHist.set(best.id, (backupHist.get(best.id) ?? 0) + 1);
+        } else {
+          weekTotal.set(best.id, (weekTotal.get(best.id) ?? 0) + 1);
+        }
         if (slot === "night") {
           if (!nightOn.has(date)) nightOn.set(date, new Set());
           nightOn.get(date)!.add(best.id);

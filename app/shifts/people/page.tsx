@@ -14,7 +14,7 @@ import {
   listPeopleWithUserLinks,
   type PersonWithLink,
 } from "@/lib/db/queries";
-import { addDays, dayLabel, isIsoDate, sundayOf, todayIso, weekDates } from "@/lib/shifts/week";
+import { addDays, dayLabel, isIsoDate, todayIso, weekDates, weekStartOf } from "@/lib/shifts/week";
 
 export const metadata = { title: "People · Shifts" };
 
@@ -68,7 +68,7 @@ export default async function PeoplePage({
 }) {
   const { week } = await searchParams;
   const weekStart =
-    week && isIsoDate(week) ? sundayOf(week) : addDays(sundayOf(todayIso()), 7);
+    week && isIsoDate(week) ? weekStartOf(week) : addDays(weekStartOf(todayIso()), 7);
   const teamId = await currentTeam();
   const admin = await isAdmin();
   const constraints = await listConstraintsForWeek(teamId, weekStart);

@@ -166,6 +166,52 @@ describe("constraints (unavailable dates)", () => {
   });
 });
 
+describe("per-shift constraints", () => {
+  it("stores and clears a single-shift unavailability", async () => {
+    await q.addPerson(teamA, "Alice");
+    const alice = (await q.listPeople(teamA))[0];
+    await q.setUnavailableShift(teamA, alice.id, "2026-07-14", "morning", true);
+    const week = await q.listConstraintsForWeek(teamA, "2026-07-12");
+    expect(week).toHaveLength(1);
+    expect(week[0]).toMatchObject({
+      personId: alice.id,
+      kind: "unavailable_shift",
+      value: "2026-07-14:morning",
+    });
+    await q.setUnavailableShift(teamA, alice.id, "2026-07-14", "morning", false);
+    expect(await q.listConstraintsForWeek(teamA, "2026-07-12")).toHaveLength(0);
+  });
+
+  it("lists whole-day and per-shift constraints together within the week window", async () => {
+    await q.addPerson(teamA, "Alice");
+    const alice = (await q.listPeople(teamA))[0];
+    await q.setUnavailable(teamA, alice.id, "2026-07-13", true); // whole day
+    await q.setUnavailableShift(teamA, alice.id, "2026-07-14", "evening", true);
+    const week = await q.listConstraintsForWeek(teamA, "2026-07-12");
+    expect(week).toHaveLength(2);
+    expect(week.map((c) => c.kind).sort()).toEqual(["unavailable_date", "unavailable_shift"]);
+  });
+
+  it("includes a per-shift constraint on the last day of the week window", async () => {
+    // The last day of the 2026-07-12 window is 2026-07-18; "2026-07-18:night"
+    // sorts after the plain date, so an inclusive upper bound would drop it.
+    await q.addPerson(teamA, "Alice");
+    const alice = (await q.listPeople(teamA))[0];
+    await q.setUnavailableShift(teamA, alice.id, "2026-07-18", "night", true);
+    await q.setUnavailableShift(teamA, alice.id, "2026-07-19", "night", true); // next week
+    const week = await q.listConstraintsForWeek(teamA, "2026-07-12");
+    expect(week).toHaveLength(1);
+    expect(week[0]).toMatchObject({ value: "2026-07-18:night" });
+  });
+
+  it("does not touch another team's person (tenancy guard)", async () => {
+    await q.addPerson(teamB, "Zoe");
+    const zoe = (await q.listPeople(teamB))[0];
+    await q.setUnavailableShift(teamA, zoe.id, "2026-07-14", "morning", true); // wrong team
+    expect(await q.listConstraintsForWeek(teamB, "2026-07-12")).toHaveLength(0);
+  });
+});
+
 describe("weeks", () => {
   it("tracks publishing per team independently", async () => {
     expect(await q.isWeekPublished(teamA, "2026-07-12")).toBe(false);
@@ -273,16 +319,17 @@ describe("swapSeat", () => {
 });
 
 describe("historyBefore", () => {
-  it("aggregates night/kitchen/total from weeks before the given start", async () => {
+  it("aggregates night/kitchen/backup/total from weeks before the given start", async () => {
     await q.addPerson(teamA, "Alice");
     const alice = (await q.listPeople(teamA))[0];
     await q.replaceWeekAssignments(teamA, "2026-07-05", [
       { date: "2026-07-05", slot: "night", personId: alice.id },
       { date: "2026-07-06", slot: "kitchen", personId: alice.id },
       { date: "2026-07-07", slot: "morning", personId: alice.id },
+      { date: "2026-07-08", slot: "backup", personId: alice.id },
     ]);
     const h = (await q.historyBefore(teamA, "2026-07-12")).find((x) => x.personId === alice.id)!;
-    expect(h).toMatchObject({ nightCount: 1, kitchenCount: 1, totalCount: 3 });
+    expect(h).toMatchObject({ nightCount: 1, kitchenCount: 1, backupCount: 1, totalCount: 4 });
     expect(await q.historyBefore(teamA, "2026-07-05")).toHaveLength(0);
   });
 
