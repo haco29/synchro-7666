@@ -69,4 +69,39 @@ describe("listOrgMembers", () => {
     expect(await listOrgMembers()).toEqual([]);
     expect(list).not.toHaveBeenCalled();
   });
+
+  it("caches per org and serves a warm org without re-hitting Clerk", async () => {
+    authMock.mockResolvedValue({ orgId: "org_warm" });
+    const list = stubMembership([]);
+
+    await listOrgMembers();
+    await listOrgMembers();
+
+    expect(list).toHaveBeenCalledTimes(1); // second call served from cache
+  });
+
+  it("evicts the oldest org once the cache is over capacity", async () => {
+    const list = stubMembership([]);
+
+    // Cache an org, then insert a full cap's worth (100) of fresh orgs — enough
+    // to fill the cache entirely and push the earlier org out (FIFO).
+    authMock.mockResolvedValue({ orgId: "org_oldest" });
+    await listOrgMembers();
+    for (let i = 0; i < 100; i++) {
+      authMock.mockResolvedValue({ orgId: `org_fill_${i}` });
+      await listOrgMembers();
+    }
+
+    const callsAfterFill = list.mock.calls.length;
+
+    // The most-recent fill org is still warm → no refetch.
+    authMock.mockResolvedValue({ orgId: "org_fill_99" });
+    await listOrgMembers();
+    expect(list.mock.calls.length).toBe(callsAfterFill);
+
+    // org_oldest was evicted → refetch.
+    authMock.mockResolvedValue({ orgId: "org_oldest" });
+    await listOrgMembers();
+    expect(list.mock.calls.length).toBe(callsAfterFill + 1);
+  });
 });

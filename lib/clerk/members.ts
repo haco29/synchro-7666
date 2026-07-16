@@ -34,6 +34,9 @@ export async function fetchOrgMembers(orgId: string): Promise<OrgMember[]> {
 // internally, disallowed in cached contexts), so a small in-memory TTL cache it
 // is. A newly-added org member becomes linkable within TTL_MS.
 const TTL_MS = 60_000;
+// Cap the number of orgs held so a long-lived, multi-tenant instance can't grow
+// this unbounded; evict the oldest (first-inserted) org when a new one overflows.
+const MAX_ORGS = 100;
 const membersByOrg = new Map<string, { at: number; members: OrgMember[] }>();
 
 /**
@@ -52,6 +55,12 @@ export async function listOrgMembers(): Promise<OrgMember[]> {
   if (cached && Date.now() - cached.at < TTL_MS) return cached.members;
 
   const members = await fetchOrgMembers(orgId);
+  // Evict the oldest entry before caching a *new* org over the cap. Refreshing
+  // an already-cached org just updates it in place (no growth, no eviction).
+  if (!membersByOrg.has(orgId) && membersByOrg.size >= MAX_ORGS) {
+    const oldest = membersByOrg.keys().next().value;
+    if (oldest !== undefined) membersByOrg.delete(oldest);
+  }
   membersByOrg.set(orgId, { at: Date.now(), members });
   return members;
 }
