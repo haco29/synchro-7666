@@ -2,17 +2,18 @@ import { describe, expect, it } from "vitest";
 import { addDays, dayLabel, isIsoDate, weekDates, weekStartOf, weekdayOf } from "./week";
 
 describe("week math", () => {
-  it("finds the Wednesday starting the week for any day in it", () => {
-    expect(weekStartOf("2026-07-15")).toBe("2026-07-15"); // Wednesday -> itself
-    expect(weekStartOf("2026-07-16")).toBe("2026-07-15"); // Thursday -> week's Wednesday
-    expect(weekStartOf("2026-07-13")).toBe("2026-07-08"); // Monday -> prior Wednesday
-    expect(weekStartOf("2026-07-14")).toBe("2026-07-08"); // Tuesday -> prior Wednesday (week end)
-    expect(weekStartOf("2026-07-12")).toBe("2026-07-08"); // Sunday -> prior Wednesday
+  it("finds the Thursday starting the week for any day in it", () => {
+    expect(weekStartOf("2026-07-16")).toBe("2026-07-16"); // Thursday -> itself
+    expect(weekStartOf("2026-07-17")).toBe("2026-07-16"); // Friday -> week's Thursday
+    expect(weekStartOf("2026-07-21")).toBe("2026-07-16"); // Tuesday -> week's Thursday
+    expect(weekStartOf("2026-07-22")).toBe("2026-07-16"); // Wednesday -> week's Thursday (week end)
+    expect(weekStartOf("2026-07-15")).toBe("2026-07-09"); // Wednesday -> prior Thursday
   });
 
   it("crosses month and year boundaries", () => {
-    expect(weekStartOf("2026-01-01")).toBe("2025-12-31"); // Thursday -> prior Wednesday
-    expect(weekStartOf("2025-12-31")).toBe("2025-12-31"); // 2025-12-31 is a Wednesday
+    expect(weekStartOf("2026-01-01")).toBe("2026-01-01"); // 2026-01-01 is a Thursday -> itself
+    expect(weekStartOf("2026-01-02")).toBe("2026-01-01"); // Friday -> week's Thursday
+    expect(weekStartOf("2025-12-31")).toBe("2025-12-25"); // Wednesday -> prior Thursday
   });
 
   it("adds days across boundaries", () => {
@@ -21,11 +22,11 @@ describe("week math", () => {
     expect(addDays("2026-07-12", -7)).toBe("2026-07-05");
   });
 
-  it("lists the 7 dates of a week from Wednesday through Tuesday", () => {
-    const dates = weekDates("2026-07-15");
+  it("lists the 7 dates of a week from Thursday through Wednesday", () => {
+    const dates = weekDates("2026-07-16");
     expect(dates).toHaveLength(7);
-    expect(dates[0]).toBe("2026-07-15"); // Wednesday
-    expect(dates[6]).toBe("2026-07-21"); // Tuesday
+    expect(dates[0]).toBe("2026-07-16"); // Thursday
+    expect(dates[6]).toBe("2026-07-22"); // Wednesday
   });
 
   it("computes weekday index with Sunday = 0", () => {

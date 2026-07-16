@@ -61,7 +61,7 @@ function requireShift(value: FormDataEntryValue | null): ShiftType {
   return shift;
 }
 
-/** A canonical week-start: the date must be the Wednesday that anchors its week. */
+/** A canonical week-start: the date must be the Thursday that anchors its week. */
 function requireWeekStart(value: FormDataEntryValue | null): string {
   const weekStart = requireDate(value);
   if (weekStartOf(weekStart) !== weekStart) {
@@ -70,7 +70,7 @@ function requireWeekStart(value: FormDataEntryValue | null): string {
   return weekStart;
 }
 
-/** A date plus the week-start (Wednesday) of the week it must belong to. */
+/** A date plus the week-start (Thursday) of the week it must belong to. */
 function requireWeekDate(
   weekValue: FormDataEntryValue | null,
   dateValue: FormDataEntryValue | null,

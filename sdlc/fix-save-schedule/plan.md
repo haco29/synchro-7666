@@ -113,6 +113,6 @@ confirms, Generate doesn't. `pnpm test`, `tsc --noEmit`, `lint`, `build` all pas
 - [x] /spec completed
 - [x] /plan completed
 - [x] /build completed
-- [ ] /test completed
-- [ ] /review completed
-- [ ] /code-simplify completed
+- [x] /test completed
+- [x] /review completed
+- [x] /code-simplify completed

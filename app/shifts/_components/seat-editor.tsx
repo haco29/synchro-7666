@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { assignSlotAction, clearSlotAction } from "../actions";
 import type { Assignment, Person, SlotType } from "@/lib/shifts/types";
 import { SLOT_LABELS } from "@/lib/shifts/types";
@@ -8,8 +10,9 @@ import { dayLabel } from "@/lib/shifts/week";
 /**
  * One editable seat of a slot: a person picker that saves the moment it changes
  * — no explicit submit. Picking a person assigns (or swaps) the seat; picking
- * "— unfilled —" on a filled seat clears it. The page keys each seat by its
- * holder, so a successful save remounts this control with the fresh value.
+ * "— unfilled —" on a filled seat clears it. The picker is optimistic; on a
+ * successful save the page re-renders with the persisted value, and on failure
+ * we revert the picker and re-sync from the server.
  */
 export function SeatEditor({
   weekStart,
@@ -28,6 +31,7 @@ export function SeatEditor({
   allPeople: Person[];
   hasViolation: boolean;
 }) {
+  const router = useRouter();
   // A seat can be held by someone deactivated after scheduling; keep them
   // visible instead of letting the select fall back to "unfilled".
   const inactiveHolder =
@@ -35,26 +39,37 @@ export function SeatEditor({
       ? allPeople.find((p) => p.id === current.personId)
       : undefined;
 
+  const persistedValue = current ? String(current.personId) : "";
+  const [value, setValue] = useState(persistedValue);
+
+  function persist(action: Promise<void>) {
+    // Server Actions revalidate only on success; on failure nothing refreshes,
+    // so revert the optimistic pick and pull true state back from the server.
+    action.catch((error) => {
+      console.error("Failed to save seat assignment", error);
+      setValue(persistedValue);
+      router.refresh();
+    });
+  }
+
   function onChange(event: React.ChangeEvent<HTMLSelectElement>) {
-    const value = event.currentTarget.value;
-    if (value === "") {
+    const next = event.currentTarget.value;
+    setValue(next);
+    const data = new FormData();
+    data.set("date", date);
+    data.set("slot", slot);
+    if (next === "") {
       // "— unfilled —" chosen on a filled seat → clear it.
       if (!current) return;
-      const data = new FormData();
-      data.set("date", date);
-      data.set("slot", slot);
       data.set("personId", String(current.personId));
-      void clearSlotAction(data);
+      persist(clearSlotAction(data));
       return;
     }
     // A person chosen → assign (or swap out whoever held the seat).
-    const data = new FormData();
     data.set("weekStart", weekStart);
-    data.set("date", date);
-    data.set("slot", slot);
     if (current) data.set("previousPersonId", String(current.personId));
-    data.set("personId", value);
-    void assignSlotAction(data);
+    data.set("personId", next);
+    persist(assignSlotAction(data));
   }
 
   return (
@@ -65,7 +80,7 @@ export function SeatEditor({
     >
       <select
         name="personId"
-        defaultValue={current?.personId ?? ""}
+        value={value}
         onChange={onChange}
         aria-label={`${SLOT_LABELS[slot]} on ${dayLabel(date)}`}
         className={`w-28 rounded border bg-transparent px-1 py-0.5 text-xs dark:bg-neutral-900 ${
