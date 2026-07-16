@@ -1,4 +1,6 @@
+import { Fragment } from "react";
 import { listAssignments } from "@/lib/db/queries";
+import { groupByRotation } from "@/lib/shifts/rotation";
 import type { Person, SlotType } from "@/lib/shifts/types";
 
 /** Per-person load for the viewed week: total plus nights/kitchen/backup counts. */
@@ -29,13 +31,25 @@ export async function FairnessPanel({
             </tr>
           </thead>
           <tbody>
-            {people.map((p) => (
-              <tr key={p.id} className="border-b border-neutral-100 dark:border-neutral-900">
-                <td className="py-1.5 pr-4 font-medium">{p.name}</td>
-                <td className="px-3 py-1.5 text-center">{weekCount(p.id)}</td>
-                <td className="px-3 py-1.5 text-center">{weekCount(p.id, "kitchen")}</td>
-                <td className="px-3 py-1.5 text-center">{weekCount(p.id, "backup")}</td>
-              </tr>
+            {groupByRotation(people).map((group) => (
+              <Fragment key={group.label}>
+                <tr className="bg-neutral-100 dark:bg-neutral-900">
+                  <td
+                    colSpan={4}
+                    className="px-3 py-1 text-xs font-semibold tracking-wide text-neutral-500 uppercase"
+                  >
+                    {group.label}
+                  </td>
+                </tr>
+                {group.people.map((p) => (
+                  <tr key={p.id} className="border-b border-neutral-100 dark:border-neutral-900">
+                    <td className="py-1.5 pr-4 font-medium">{p.name}</td>
+                    <td className="px-3 py-1.5 text-center">{weekCount(p.id)}</td>
+                    <td className="px-3 py-1.5 text-center">{weekCount(p.id, "kitchen")}</td>
+                    <td className="px-3 py-1.5 text-center">{weekCount(p.id, "backup")}</td>
+                  </tr>
+                ))}
+              </Fragment>
             ))}
           </tbody>
         </table>

@@ -70,10 +70,18 @@ export async function listPeople(teamId: number, includeInactive = false): Promi
     : and(eq(people.teamId, teamId), eq(people.active, true));
   // The select already projects exactly the `Person` shape (active is a boolean column).
   return getDb()
-    .select({ id: people.id, name: people.name, active: people.active })
+    .select({
+      id: people.id,
+      name: people.name,
+      active: people.active,
+      rotation: people.rotation,
+    })
     .from(people)
     .where(where)
-    .orderBy(asc(people.name));
+    .orderBy(
+      sql`CASE WHEN ${people.rotation} IS NULL THEN 999 ELSE ${people.rotation} END`,
+      asc(people.name),
+    );
 }
 
 export async function addPerson(teamId: number, name: string): Promise<void> {
@@ -108,6 +116,18 @@ export async function setPersonActive(
     .where(and(eq(people.id, id), eq(people.teamId, teamId)));
 }
 
+/** Set (or clear, with null) a team's person's rotation group. Team-scoped. */
+export async function setPersonRotation(
+  teamId: number,
+  id: number,
+  rotation: number | null,
+): Promise<void> {
+  await getDb()
+    .update(people)
+    .set({ rotation })
+    .where(and(eq(people.id, id), eq(people.teamId, teamId)));
+}
+
 /** A person plus their Clerk link — for the admin roster/linking UI only. */
 export type PersonWithLink = Person & { clerkUserId: string | null };
 
@@ -118,11 +138,15 @@ export async function listPeopleWithUserLinks(teamId: number): Promise<PersonWit
       id: people.id,
       name: people.name,
       active: people.active,
+      rotation: people.rotation,
       clerkUserId: people.clerkUserId,
     })
     .from(people)
     .where(eq(people.teamId, teamId))
-    .orderBy(asc(people.name));
+    .orderBy(
+      sql`CASE WHEN ${people.rotation} IS NULL THEN 999 ELSE ${people.rotation} END`,
+      asc(people.name),
+    );
 }
 
 /**

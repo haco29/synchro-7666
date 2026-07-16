@@ -10,7 +10,9 @@ import {
   toggleUnavailableAction,
   unlinkPersonAction,
 } from "../actions";
+import { Fragment } from "react";
 import { WeekNav } from "../_components/week-nav";
+import { RotationSelect } from "../_components/rotation-select";
 import { currentPersonId, currentTeam, isAdmin } from "@/lib/auth";
 import { listOrgMembers, type OrgMember } from "@/lib/clerk/members";
 import {
@@ -18,6 +20,7 @@ import {
   listPeopleWithUserLinks,
   type PersonWithLink,
 } from "@/lib/db/queries";
+import { groupByRotation } from "@/lib/shifts/rotation";
 import type { ShiftType } from "@/lib/shifts/types";
 import { SHIFT_TYPES, SLOT_LABELS } from "@/lib/shifts/types";
 import { dayLabel, isIsoDate, todayIso, weekDates, weekStartOf } from "@/lib/shifts/week";
@@ -322,6 +325,7 @@ function AdminView({
               <thead>
                 <tr className="border-b border-neutral-200 text-left dark:border-neutral-800">
                   <th className="py-2 pr-4 font-medium">Person</th>
+                  <th className="px-2 py-2 font-medium">Rotation</th>
                   {dates.map((d) => (
                     <th key={d} className="px-2 py-2 text-center font-medium">
                       {dayLabel(d)}
@@ -333,12 +337,25 @@ function AdminView({
                 </tr>
               </thead>
               <tbody>
-                {people.map((p) => (
+                {groupByRotation(people).map((group) => (
+                  <Fragment key={group.label}>
+                    <tr className="bg-neutral-100 dark:bg-neutral-900">
+                      <td
+                        colSpan={dates.length + 5}
+                        className="px-2 py-1 text-xs font-semibold tracking-wide text-neutral-500 uppercase"
+                      >
+                        {group.label}
+                      </td>
+                    </tr>
+                    {group.people.map((p) => (
                   <tr
                     key={p.id}
                     className={`border-b border-neutral-100 dark:border-neutral-900 ${p.active ? "" : "opacity-50"}`}
                   >
                     <td className="py-2 pr-4 font-medium">{p.name}</td>
+                    <td className="px-2 py-2">
+                      <RotationSelect personId={p.id} personName={p.name} rotation={p.rotation} />
+                    </td>
                     {dates.map((date) => (
                       <td key={date} className="px-2 py-2 text-center">
                         <AvailabilityCell
@@ -420,6 +437,8 @@ function AdminView({
                       </div>
                     </td>
                   </tr>
+                    ))}
+                  </Fragment>
                 ))}
               </tbody>
             </table>
