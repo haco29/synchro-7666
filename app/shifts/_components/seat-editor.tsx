@@ -1,7 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { startTransition, useOptimistic } from "react";
 import { assignSlotAction, clearSlotAction } from "../actions";
 import type { Assignment, Person, SlotType } from "@/lib/shifts/types";
 import { SLOT_LABELS } from "@/lib/shifts/types";
@@ -10,9 +9,10 @@ import { dayLabel } from "@/lib/shifts/week";
 /**
  * One editable seat of a slot: a person picker that saves the moment it changes
  * — no explicit submit. Picking a person assigns (or swaps) the seat; picking
- * "— unfilled —" on a filled seat clears it. The picker is optimistic; on a
- * successful save the page re-renders with the persisted value, and on failure
- * we revert the picker and re-sync from the server.
+ * "— unfilled —" on a filled seat clears it. The picker is optimistic via
+ * `useOptimistic` derived from the server-persisted value: a successful save
+ * revalidates and the new value sticks, while a failed save (or any other
+ * server-side change to this seat) reverts to the true state automatically.
  */
 export function SeatEditor({
   weekStart,
@@ -31,7 +31,6 @@ export function SeatEditor({
   allPeople: Person[];
   hasViolation: boolean;
 }) {
-  const router = useRouter();
   // A seat can be held by someone deactivated after scheduling; keep them
   // visible instead of letting the select fall back to "unfilled".
   const inactiveHolder =
@@ -40,36 +39,37 @@ export function SeatEditor({
       : undefined;
 
   const persistedValue = current ? String(current.personId) : "";
-  const [value, setValue] = useState(persistedValue);
-
-  function persist(action: Promise<void>) {
-    // Server Actions revalidate only on success; on failure nothing refreshes,
-    // so revert the optimistic pick and pull true state back from the server.
-    action.catch((error) => {
-      console.error("Failed to save seat assignment", error);
-      setValue(persistedValue);
-      router.refresh();
-    });
-  }
+  const [value, setOptimisticValue] = useOptimistic(
+    persistedValue,
+    (_current, next: string) => next,
+  );
 
   function onChange(event: React.ChangeEvent<HTMLSelectElement>) {
     const next = event.currentTarget.value;
-    setValue(next);
-    const data = new FormData();
-    data.set("date", date);
-    data.set("slot", slot);
-    if (next === "") {
-      // "— unfilled —" chosen on a filled seat → clear it.
-      if (!current) return;
-      data.set("personId", String(current.personId));
-      persist(clearSlotAction(data));
-      return;
-    }
-    // A person chosen → assign (or swap out whoever held the seat).
-    data.set("weekStart", weekStart);
-    if (current) data.set("previousPersonId", String(current.personId));
-    data.set("personId", next);
-    persist(assignSlotAction(data));
+    startTransition(async () => {
+      setOptimisticValue(next);
+      const data = new FormData();
+      data.set("date", date);
+      data.set("slot", slot);
+      try {
+        if (next === "") {
+          // "— unfilled —" chosen on a filled seat → clear it.
+          if (!current) return;
+          data.set("personId", String(current.personId));
+          await clearSlotAction(data);
+          return;
+        }
+        // A person chosen → assign (or swap out whoever held the seat).
+        data.set("weekStart", weekStart);
+        if (current) data.set("previousPersonId", String(current.personId));
+        data.set("personId", next);
+        await assignSlotAction(data);
+      } catch (error) {
+        // The optimistic pick reverts automatically when the transition ends;
+        // surface the failure rather than swallowing it.
+        console.error("Failed to save seat assignment", error);
+      }
+    });
   }
 
   return (
