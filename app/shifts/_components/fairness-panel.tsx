@@ -1,8 +1,7 @@
-import { historyBefore, listAssignments } from "@/lib/db/queries";
+import { listAssignments } from "@/lib/db/queries";
 import type { Person, SlotType } from "@/lib/shifts/types";
-import { addDays } from "@/lib/shifts/week";
 
-/** Per-person load: this week's counts plus all-time nights/kitchens/backup rest. */
+/** Per-person load for the viewed week: total plus nights/kitchen/backup counts. */
 export async function FairnessPanel({
   teamId,
   weekStart,
@@ -13,9 +12,6 @@ export async function FairnessPanel({
   people: Person[];
 }) {
   const week = await listAssignments(teamId, weekStart);
-  const allTime = new Map(
-    (await historyBefore(teamId, addDays(weekStart, 7))).map((h) => [h.personId, h]),
-  );
   const weekCount = (id: number, slot?: SlotType) =>
     week.filter((a) => a.personId === id && (slot ? a.slot === slot : true)).length;
 
@@ -28,13 +24,8 @@ export async function FairnessPanel({
             <tr className="border-b border-neutral-200 text-left dark:border-neutral-800">
               <th className="py-1.5 pr-4 font-medium">Person</th>
               <th className="px-3 py-1.5 text-center font-medium">This week</th>
-              <th className="px-3 py-1.5 text-center font-medium">Nights (week)</th>
               <th className="px-3 py-1.5 text-center font-medium">Kitchen (week)</th>
               <th className="px-3 py-1.5 text-center font-medium">Backup (week)</th>
-              <th className="px-3 py-1.5 text-center font-medium">Nights (all-time)</th>
-              <th className="px-3 py-1.5 text-center font-medium">Kitchen (all-time)</th>
-              <th className="px-3 py-1.5 text-center font-medium">Backup (all-time)</th>
-              <th className="px-3 py-1.5 text-center font-medium">Total (all-time)</th>
             </tr>
           </thead>
           <tbody>
@@ -42,21 +33,8 @@ export async function FairnessPanel({
               <tr key={p.id} className="border-b border-neutral-100 dark:border-neutral-900">
                 <td className="py-1.5 pr-4 font-medium">{p.name}</td>
                 <td className="px-3 py-1.5 text-center">{weekCount(p.id)}</td>
-                <td className="px-3 py-1.5 text-center">{weekCount(p.id, "night")}</td>
                 <td className="px-3 py-1.5 text-center">{weekCount(p.id, "kitchen")}</td>
                 <td className="px-3 py-1.5 text-center">{weekCount(p.id, "backup")}</td>
-                <td className="px-3 py-1.5 text-center">
-                  {allTime.get(p.id)?.nightCount ?? 0}
-                </td>
-                <td className="px-3 py-1.5 text-center">
-                  {allTime.get(p.id)?.kitchenCount ?? 0}
-                </td>
-                <td className="px-3 py-1.5 text-center">
-                  {allTime.get(p.id)?.backupCount ?? 0}
-                </td>
-                <td className="px-3 py-1.5 text-center">
-                  {allTime.get(p.id)?.totalCount ?? 0}
-                </td>
               </tr>
             ))}
           </tbody>

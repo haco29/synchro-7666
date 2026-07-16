@@ -8,7 +8,6 @@ import {
   addPerson,
   historyBefore,
   isPersonActive,
-  isWeekPublished,
   linkPersonToUser,
   listConstraintsForWeek,
   listPeople,
@@ -18,7 +17,6 @@ import {
   setPersonActive,
   setUnavailable,
   setUnavailableShift,
-  setWeekPublished,
   setWeekUnavailable,
   swapSeat,
   unlinkPerson,
@@ -63,7 +61,7 @@ function requireShift(value: FormDataEntryValue | null): ShiftType {
   return shift;
 }
 
-/** A canonical week-start: the date must be the Wednesday that anchors its week. */
+/** A canonical week-start: the date must be the Thursday that anchors its week. */
 function requireWeekStart(value: FormDataEntryValue | null): string {
   const weekStart = requireDate(value);
   if (weekStartOf(weekStart) !== weekStart) {
@@ -72,7 +70,7 @@ function requireWeekStart(value: FormDataEntryValue | null): string {
   return weekStart;
 }
 
-/** A date plus the week-start (Wednesday) of the week it must belong to. */
+/** A date plus the week-start (Thursday) of the week it must belong to. */
 function requireWeekDate(
   weekValue: FormDataEntryValue | null,
   dateValue: FormDataEntryValue | null,
@@ -234,9 +232,8 @@ export async function blockMyWeekAction(formData: FormData) {
 export async function generateWeekAction(formData: FormData) {
   const { teamId } = await requireAdmin();
   const weekStart = requireDate(formData.get("weekStart"));
-  // Never regenerate a live schedule out from under viewers (and manual
-  // tweaks); the UI disables the button, this guards direct POSTs.
-  if (await isWeekPublished(teamId, weekStart)) return;
+  // Schedules are live-edited — there is no publish gate. Overwriting manual
+  // tweaks is guarded in the UI by a "Regenerate" confirm, not a server flag.
   const seed = Date.now() % 2 ** 31;
   const result = generateWeek({
     weekStart,
@@ -278,13 +275,6 @@ export async function clearSlotAction(formData: FormData) {
     slot,
     personId: requireId(formData.get("personId")),
   });
-  revalidatePath("/shifts", "layout");
-}
-
-export async function setPublishedAction(formData: FormData) {
-  const { teamId } = await requireAdmin();
-  const weekStart = requireDate(formData.get("weekStart"));
-  await setWeekPublished(teamId, weekStart, formData.get("published") === "1");
   revalidatePath("/shifts", "layout");
 }
 

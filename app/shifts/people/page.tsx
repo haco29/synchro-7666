@@ -20,7 +20,7 @@ import {
 } from "@/lib/db/queries";
 import type { ShiftType } from "@/lib/shifts/types";
 import { SHIFT_TYPES, SLOT_LABELS } from "@/lib/shifts/types";
-import { addDays, dayLabel, isIsoDate, todayIso, weekDates, weekStartOf } from "@/lib/shifts/week";
+import { dayLabel, isIsoDate, todayIso, weekDates, weekStartOf } from "@/lib/shifts/week";
 
 /** Compact per-shift labels for the availability grid. */
 const SHIFT_LETTER: Record<ShiftType, string> = {
@@ -156,7 +156,7 @@ export default async function PeoplePage({
 }) {
   const { week } = await searchParams;
   const weekStart =
-    week && isIsoDate(week) ? weekStartOf(week) : addDays(weekStartOf(todayIso()), 7);
+    week && isIsoDate(week) ? weekStartOf(week) : weekStartOf(todayIso());
   const teamId = await currentTeam();
   const admin = await isAdmin();
   const constraints = await listConstraintsForWeek(teamId, weekStart);

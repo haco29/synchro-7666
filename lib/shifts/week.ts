@@ -1,14 +1,14 @@
 /**
  * Week/date math over ISO `YYYY-MM-DD` strings. All computation is done in UTC
- * so results never depend on the server's timezone. Weeks run Wednesday–Tuesday.
+ * so results never depend on the server's timezone. Weeks run Thursday–Wednesday.
  */
 
 /**
  * Weekday a week starts on, using `weekdayOf`'s Sunday = 0 … Saturday = 6 index.
- * Wednesday (3) is the single source of truth for the week anchor — change this
+ * Thursday (4) is the single source of truth for the week anchor — change this
  * (or later derive it per team) and all week math follows.
  */
-export const WEEK_START_DOW = 3;
+export const WEEK_START_DOW = 4;
 
 function toUtc(date: string): Date {
   return new Date(`${date}T00:00:00Z`);
@@ -35,13 +35,13 @@ export function addDays(date: string, days: number): string {
   return toIso(d);
 }
 
-/** The week-anchor day (Wednesday) starting the week that contains `date`. */
+/** The week-anchor day (Thursday) starting the week that contains `date`. */
 export function weekStartOf(date: string): string {
   const offset = (weekdayOf(date) - WEEK_START_DOW + 7) % 7;
   return addDays(date, -offset);
 }
 
-/** The 7 dates of the week starting at `weekStart` (a Wednesday), through Tuesday. */
+/** The 7 dates of the week starting at `weekStart` (a Thursday), through Wednesday. */
 export function weekDates(weekStart: string): string[] {
   return Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 }
