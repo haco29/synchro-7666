@@ -53,7 +53,8 @@ function requireSlot(value: FormDataEntryValue | null): SlotType {
   return slot;
 }
 
-/** Availability is per time-shift only — kitchen/backup are never shift-blocked. */
+/** Availability input is per time-shift only — there is no direct kitchen/backup
+ *  toggle (they follow full-day availability; see the scheduler). */
 function requireShift(value: FormDataEntryValue | null): ShiftType {
   const shift = String(value) as ShiftType;
   if (!SHIFT_TYPES.includes(shift)) {

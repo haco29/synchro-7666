@@ -38,8 +38,9 @@ export function computeViolations(
     }
   }
 
-  // Whole-day off conflicts with any slot; a per-shift block only conflicts
-  // with an assignment to that same time-shift.
+  // Whole-day off conflicts with any slot. A per-shift block conflicts with an
+  // assignment to that same time-shift, and — because kitchen/backup require
+  // full-day availability — with any kitchen/backup assignment that day.
   const wholeDayOff = new Set(
     constraints
       .filter((c) => c.kind === "unavailable_date")
@@ -50,10 +51,17 @@ export function computeViolations(
       .filter((c) => c.kind === "unavailable_shift")
       .map((c) => `${c.value}:${c.personId}`),
   );
+  const anyShiftOff = new Set(
+    constraints
+      .filter((c) => c.kind === "unavailable_shift")
+      .map((c) => `${c.value.split(":")[0]}:${c.personId}`),
+  );
   for (const a of assignments) {
+    const fullDaySlot = a.slot === "kitchen" || a.slot === "backup";
     if (
       wholeDayOff.has(`${a.date}:${a.personId}`) ||
-      shiftOff.has(`${a.date}:${a.slot}:${a.personId}`)
+      shiftOff.has(`${a.date}:${a.slot}:${a.personId}`) ||
+      (fullDaySlot && anyShiftOff.has(`${a.date}:${a.personId}`))
     ) {
       violations.push({
         kind: "unavailable",

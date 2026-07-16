@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { generateWeek } from "./generate";
-import { SHIFT_TYPES, SLOT_CAPACITY, SLOT_TYPES } from "../shifts/types";
+import { SLOT_CAPACITY, SLOT_TYPES } from "../shifts/types";
 import type {
   Assignment,
   Constraint,
@@ -34,14 +34,33 @@ function assertHardRules(assignments: Assignment[], constraints: Constraint[]) {
   for (const [key, count] of perDay) {
     expect(count, `person double-booked on ${key}`).toBe(1);
   }
-  // never assigned on an unavailable date
-  const unavailable = new Set(
-    constraints.map((c) => `${c.value}:${c.personId}`),
+  const wholeDayOff = new Set(
+    constraints.filter((c) => c.kind === "unavailable_date").map((c) => `${c.value}:${c.personId}`),
+  );
+  const shiftOff = new Set(
+    constraints.filter((c) => c.kind === "unavailable_shift").map((c) => `${c.value}:${c.personId}`),
+  );
+  const anyShiftOff = new Set(
+    constraints
+      .filter((c) => c.kind === "unavailable_shift")
+      .map((c) => `${c.value.split(":")[0]}:${c.personId}`),
   );
   for (const a of assignments) {
-    expect(unavailable.has(`${a.date}:${a.personId}`), `assigned while unavailable`).toBe(
-      false,
-    );
+    // never assigned on a whole-day off
+    expect(wholeDayOff.has(`${a.date}:${a.personId}`), `assigned while off all day`).toBe(false);
+    if (a.slot === "kitchen" || a.slot === "backup") {
+      // kitchen/backup require a full day free — no per-shift block that day
+      expect(
+        anyShiftOff.has(`${a.date}:${a.personId}`),
+        `${a.slot} assigned despite a per-shift block`,
+      ).toBe(false);
+    } else {
+      // never assigned to a blocked time-shift
+      expect(
+        shiftOff.has(`${a.date}:${a.slot}:${a.personId}`),
+        `assigned to blocked ${a.slot}`,
+      ).toBe(false);
+    }
   }
 }
 
@@ -190,7 +209,7 @@ describe("generateWeek", () => {
     assertHardRules(assignments, constraints);
   });
 
-  it("never assigns a person to a time-shift they blocked, but keeps other roles open", () => {
+  it("blocks a shift AND kitchen/backup that day, but keeps the other time-shifts open", () => {
     const people = roster(6);
     const D = addDays(WEEK, 2);
     const constraints: Constraint[] = [
@@ -199,38 +218,39 @@ describe("generateWeek", () => {
     const slotsSeen = new Set<string>();
     for (let seed = 0; seed < 20; seed++) {
       const { assignments } = generateWeek(input({ people, constraints, seed }));
-      // Hard rule: person 1 is never on the blocked morning shift for D.
-      expect(
-        assignments.some((a) => a.date === D && a.slot === "morning" && a.personId === 1),
-      ).toBe(false);
+      assertHardRules(assignments, constraints);
       for (const a of assignments.filter((a) => a.date === D && a.personId === 1)) {
         slotsSeen.add(a.slot);
       }
     }
-    // The block is shift-scoped: person 1 still gets used for other roles on D.
+    // Person 1 still gets used on D — but only for the other time-shifts.
     expect(slotsSeen.size).toBeGreaterThan(0);
+    // The blocked shift and both full-day roles are off-limits that day.
     expect(slotsSeen.has("morning")).toBe(false);
+    expect(slotsSeen.has("kitchen")).toBe(false);
+    expect(slotsSeen.has("backup")).toBe(false);
   });
 
-  it("keeps kitchen/backup open to a person blocked on all three shifts", () => {
-    // Everyone else is off the whole day; person 1 is blocked for all three
-    // time-shifts. A per-shift block never gates kitchen/backup, so person 1 is
-    // still placeable — greedy fills backup first, so they land there.
+  it("makes a person blocked on any shift ineligible for kitchen/backup too", () => {
+    // Person 2 is off the whole day; person 1 is blocked for just one shift.
+    // Kitchen and backup require a full day free, so neither person can cover
+    // them — those slots gap rather than being filled by the shift-blocked P1.
     const people = roster(2);
     const D = addDays(WEEK, 1);
     const constraints: Constraint[] = [
       { id: 99, personId: 2, kind: "unavailable_date", value: D },
-      ...SHIFT_TYPES.map((s, i) => ({
-        id: i + 1,
-        personId: 1,
-        kind: "unavailable_shift" as const,
-        value: `${D}:${s}`,
-      })),
+      { id: 1, personId: 1, kind: "unavailable_shift", value: `${D}:morning` },
     ];
-    const { assignments } = generateWeek(input({ people, constraints, seed: 3 }));
-    const onD = assignments.filter((a) => a.date === D && a.personId === 1);
-    expect(onD).toHaveLength(1);
-    expect(["kitchen", "backup"]).toContain(onD[0].slot);
+    const { assignments, gaps } = generateWeek(input({ people, constraints, seed: 3 }));
+    assertHardRules(assignments, constraints);
+    // Person 1 is never placed on kitchen or backup on D.
+    const p1FullDay = assignments.filter(
+      (a) => a.date === D && a.personId === 1 && (a.slot === "kitchen" || a.slot === "backup"),
+    );
+    expect(p1FullDay).toHaveLength(0);
+    // With no full-day-free person, kitchen and backup gap on D.
+    expect(gaps.some((g) => g.date === D && g.slot === "kitchen")).toBe(true);
+    expect(gaps.some((g) => g.date === D && g.slot === "backup")).toBe(true);
   });
 
   it("steers backup away from someone already far ahead on rest (history-seeded)", () => {

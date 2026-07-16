@@ -42,7 +42,8 @@ const FREE_CLASSES =
 /**
  * Availability controls for one (person, date): a whole-day off toggle plus a
  * per-time-shift toggle for morning/evening/night. Kitchen and backup have no
- * separate control — they're gated only by the whole-day off. The two actions
+ * separate control — they need a full day free, so any block (whole-day OR a
+ * single shift) that day makes the person ineligible for them. The two actions
  * are injected so the same cell serves an admin editing anyone and a member
  * editing only themselves. A whole-day off subsumes the shifts, so the shift
  * buttons are disabled (and dimmed) while it's set.
@@ -312,7 +313,7 @@ function AdminView({
         <p className="text-sm text-neutral-500">
           Mark when each person is <strong>unavailable</strong> this week — a whole day, or a
           single shift (<strong>M</strong>orning / <strong>E</strong>vening / <strong>N</strong>ight).
-          Kitchen and backup are only blocked by a whole-day off.
+          Kitchen and backup need a full day free — any block, whole-day or a single shift, rules them out that day.
         </p>
 
         {people.length === 0 ? (
