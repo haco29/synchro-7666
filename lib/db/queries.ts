@@ -303,9 +303,10 @@ export async function setUnavailable(
 
 /**
  * Toggle a person's unavailability for a single time-shift on one date. Unlike
- * `setUnavailable` (whole day), this blocks only the given shift — the person
- * stays eligible for the other shifts, kitchen, and backup. Value is stored as
- * `YYYY-MM-DD:<shift>`.
+ * `setUnavailable` (whole day), this blocks only the given time-shift — the
+ * person stays eligible for the other time-shifts. Kitchen and backup require
+ * full-day availability, so any per-shift block also rules them out that day.
+ * Value is stored as `YYYY-MM-DD:<shift>`.
  */
 export async function setUnavailableShift(
   teamId: number,

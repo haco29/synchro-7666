@@ -46,9 +46,11 @@ export function generateWeek(input: GenerateInput): GenerateResult {
   const rng = makeRng(input.seed ?? 1);
   const dates = weekDates(input.weekStart);
 
-  // Whole-day off blocks every slot (incl. kitchen and backup); a per-shift
-  // block only blocks that one time-shift. Keys: `${date}:${personId}` and
-  // `${date}:${shift}:${personId}` (the shift value is already `date:shift`).
+  // Whole-day off blocks every slot. A per-shift block blocks that one
+  // time-shift AND, because kitchen and backup require full-day availability,
+  // it also makes the person ineligible for kitchen/backup that day.
+  // Keys: wholeDayOff `${date}:${personId}`, shiftOff `${date}:${shift}:${personId}`
+  // (the shift value is already `date:shift`), anyShiftOff `${date}:${personId}`.
   const wholeDayOff = new Set(
     input.constraints
       .filter((c) => c.kind === "unavailable_date")
@@ -58,6 +60,11 @@ export function generateWeek(input: GenerateInput): GenerateResult {
     input.constraints
       .filter((c) => c.kind === "unavailable_shift")
       .map((c) => `${c.value}:${c.personId}`),
+  );
+  const anyShiftOff = new Set(
+    input.constraints
+      .filter((c) => c.kind === "unavailable_shift")
+      .map((c) => `${c.value.split(":")[0]}:${c.personId}`),
   );
 
   const nightHist = new Map<number, number>();
@@ -78,14 +85,18 @@ export function generateWeek(input: GenerateInput): GenerateResult {
 
   for (const date of dates) {
     for (const slot of FILL_ORDER) {
+      // Kitchen and backup demand a full day free: any per-shift block that
+      // day disqualifies them. Time-shifts are blocked only by a matching
+      // per-shift block for that specific shift.
+      const isTimeShift = slot !== "kitchen" && slot !== "backup";
       for (let seat = 0; seat < SLOT_CAPACITY[slot]; seat++) {
         const candidates = input.people.filter(
           (p) =>
             p.active &&
             !wholeDayOff.has(`${date}:${p.id}`) &&
-            // Only time-shift slots ever have a shiftOff key; kitchen/backup
-            // never match, so they stay gated by whole-day off alone.
-            !shiftOff.has(`${date}:${slot}:${p.id}`) &&
+            (isTimeShift
+              ? !shiftOff.has(`${date}:${slot}:${p.id}`)
+              : !anyShiftOff.has(`${date}:${p.id}`)) &&
             !busyOn.get(date)?.has(p.id),
         );
         if (candidates.length === 0) {

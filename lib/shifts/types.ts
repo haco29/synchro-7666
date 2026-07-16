@@ -34,9 +34,10 @@ export interface Person {
  * additive — extend this union and wire them through the engine + violations.
  * - `unavailable_date`: value is an ISO date; the person is off the WHOLE day
  *   (ineligible for every slot, incl. kitchen and backup).
- * - `unavailable_shift`: value is `YYYY-MM-DD:<shift>`; the person is off only
- *   that one time-shift (morning/evening/night) and still eligible for the
- *   other shifts, kitchen, and backup.
+ * - `unavailable_shift`: value is `YYYY-MM-DD:<shift>`; the person is off that
+ *   one time-shift (morning/evening/night) — still eligible for the OTHER
+ *   time-shifts, but NOT for kitchen or backup, which require full-day
+ *   availability, so any per-shift block that day rules them out.
  */
 export type ConstraintKind = "unavailable_date" | "unavailable_shift";
 
