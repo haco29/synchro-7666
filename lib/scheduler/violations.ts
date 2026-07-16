@@ -1,15 +1,18 @@
 import type { Assignment, Constraint, Person, Violation } from "../shifts/types";
-import { dayLabel } from "../shifts/week";
+import { addDays, dayLabel } from "../shifts/week";
 
 /**
  * Hard-rule check for a week's assignments, used to warn (not block) after
  * manual overrides. Kitchen-while-on-shift is covered by the double-booking
- * rule, since both are same-day assignments.
+ * rule, since both are same-day assignments. `priorDayNights` carries the
+ * previous week's last-day night assignments so the kitchen-after-night rule
+ * can be checked across the week boundary too.
  */
 export function computeViolations(
   assignments: Assignment[],
   constraints: Constraint[],
   people: Person[],
+  priorDayNights: Assignment[] = [],
 ): Violation[] {
   const names = new Map(people.map((p) => [p.id, p.name]));
   const nameOf = (id: number) => names.get(id) ?? `#${id}`;
@@ -69,6 +72,25 @@ export function computeViolations(
         slot: a.slot,
         personId: a.personId,
         message: `${nameOf(a.personId)} is marked unavailable for ${a.slot} on ${dayLabel(a.date)}`,
+      });
+    }
+  }
+
+  // Night ends 07:00 the next morning — a full day of kitchen duty right after
+  // leaves no time to sleep, so that pairing is flagged on the kitchen seat.
+  const nightOn = new Set(
+    [...assignments, ...priorDayNights]
+      .filter((a) => a.slot === "night")
+      .map((a) => `${a.date}:${a.personId}`),
+  );
+  for (const a of assignments) {
+    if (a.slot === "kitchen" && nightOn.has(`${addDays(a.date, -1)}:${a.personId}`)) {
+      violations.push({
+        kind: "kitchen_after_night",
+        date: a.date,
+        slot: a.slot,
+        personId: a.personId,
+        message: `${nameOf(a.personId)} has kitchen duty on ${dayLabel(a.date)} right after a night shift`,
       });
     }
   }
