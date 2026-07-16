@@ -15,6 +15,7 @@ import {
   renamePerson,
   replaceWeekAssignments,
   setPersonActive,
+  setPersonRotation,
   setUnavailable,
   setUnavailableShift,
   setWeekUnavailable,
@@ -102,6 +103,15 @@ export async function renamePersonAction(formData: FormData) {
 export async function setPersonActiveAction(formData: FormData) {
   const { teamId } = await requireAdmin();
   await setPersonActive(teamId, requireId(formData.get("personId")), formData.get("active") === "1");
+  revalidatePath("/shifts", "layout");
+}
+
+export async function setPersonRotationAction(formData: FormData) {
+  const { teamId } = await requireAdmin();
+  const raw = String(formData.get("rotation") ?? "");
+  // Only "1"/"2" set a rotation; anything else (incl. "") clears it (no rotation).
+  const rotation = raw === "1" ? 1 : raw === "2" ? 2 : null;
+  await setPersonRotation(teamId, requireId(formData.get("personId")), rotation);
   revalidatePath("/shifts", "layout");
 }
 

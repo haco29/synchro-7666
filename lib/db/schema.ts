@@ -25,6 +25,8 @@ export const people = sqliteTable(
     // roster-only. Unique so a Clerk user maps to at most one person; SQLite treats
     // NULLs as distinct, so multiple unlinked people coexist (see lib/auth.ts).
     clerkUserId: text("clerk_user_id").unique(),
+    // 1 or 2 = rotation group; NULL = no rotation (e.g. קצין). Ordering/labelling only.
+    rotation: integer("rotation"),
   },
   (t) => [uniqueIndex("people_team_name_unq").on(t.teamId, t.name)],
 );

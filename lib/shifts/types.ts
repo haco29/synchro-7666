@@ -25,6 +25,8 @@ export interface Person {
   id: number;
   name: string;
   active: boolean;
+  /** Rotation group: 1 or 2, or null/undefined for "no rotation". Ordering/labelling only. */
+  rotation?: number | null;
 }
 
 /**
