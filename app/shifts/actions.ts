@@ -11,6 +11,7 @@ import {
   linkPersonToUser,
   listConstraintsForWeek,
   listPeople,
+  nightAssignmentsOn,
   removeAssignment,
   renamePerson,
   replaceWeekAssignments,
@@ -25,7 +26,7 @@ import {
 import { generateWeek } from "@/lib/scheduler/generate";
 import type { ShiftType, SlotType } from "@/lib/shifts/types";
 import { SHIFT_TYPES, SLOT_TYPES } from "@/lib/shifts/types";
-import { isIsoDate, weekStartOf } from "@/lib/shifts/week";
+import { addDays, isIsoDate, weekStartOf } from "@/lib/shifts/week";
 
 // Server Actions are directly POSTable, so every input is validated here —
 // the forms rendering them are not a trust boundary.
@@ -251,6 +252,10 @@ export async function generateWeekAction(formData: FormData) {
     people: await listPeople(teamId),
     constraints: await listConstraintsForWeek(teamId, weekStart),
     history: await historyBefore(teamId, weekStart),
+    // Whoever worked the prior week's last night can't take kitchen on day one.
+    priorNightPersonIds: (await nightAssignmentsOn(teamId, addDays(weekStart, -1))).map(
+      (a) => a.personId,
+    ),
     seed,
   });
   await replaceWeekAssignments(teamId, weekStart, result.assignments);

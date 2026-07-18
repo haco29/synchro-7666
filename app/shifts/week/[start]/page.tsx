@@ -9,11 +9,12 @@ import {
   listAssignments,
   listConstraintsForWeek,
   listPeople,
+  nightAssignmentsOn,
 } from "@/lib/db/queries";
 import { computeViolations } from "@/lib/scheduler/violations";
 import type { Assignment, SlotType } from "@/lib/shifts/types";
 import { SLOT_CAPACITY, SLOT_LABELS, SLOT_TYPES } from "@/lib/shifts/types";
-import { dayLabel, isIsoDate, weekDates, weekStartOf } from "@/lib/shifts/week";
+import { addDays, dayLabel, isIsoDate, weekDates, weekStartOf } from "@/lib/shifts/week";
 
 export const metadata = { title: "Week · Shifts" };
 
@@ -32,7 +33,9 @@ export default async function WeekPage({
   const people = allPeople.filter((p) => p.active);
   const assignments = await listAssignments(teamId, weekStart);
   const constraints = await listConstraintsForWeek(teamId, weekStart);
-  const violations = computeViolations(assignments, constraints, allPeople);
+  // Prior week's last night feeds the kitchen-after-night check on day one.
+  const priorDayNights = await nightAssignmentsOn(teamId, addDays(weekStart, -1));
+  const violations = computeViolations(assignments, constraints, allPeople, priorDayNights);
   const dates = weekDates(weekStart);
   const violationKeys = new Set(violations.map((v) => `${v.date}:${v.slot}:${v.personId}`));
 

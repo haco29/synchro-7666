@@ -423,6 +423,22 @@ export async function listAssignments(teamId: number, weekStart: string): Promis
   return rows.map((r) => ({ date: r.date, slot: r.slot as SlotType, personId: r.personId }));
 }
 
+/**
+ * The team's night assignments on one date, regardless of which week row they
+ * live in. Used for the kitchen-after-night rule across the week boundary:
+ * callers pass the day before a weekStart to learn who must sleep on day one.
+ */
+export async function nightAssignmentsOn(teamId: number, date: string): Promise<Assignment[]> {
+  const rows = await getDb()
+    .select({ date: assignments.date, slot: assignments.slot, personId: assignments.personId })
+    .from(assignments)
+    .innerJoin(weeks, eq(assignments.weekId, weeks.id))
+    .where(
+      and(eq(weeks.teamId, teamId), eq(assignments.date, date), eq(assignments.slot, "night")),
+    );
+  return rows.map((r) => ({ date: r.date, slot: r.slot as SlotType, personId: r.personId }));
+}
+
 export async function replaceWeekAssignments(
   teamId: number,
   weekStart: string,
