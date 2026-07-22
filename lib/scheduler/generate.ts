@@ -66,6 +66,13 @@ export function generateWeek(input: GenerateInput): GenerateResult {
       .filter((c) => c.kind === "unavailable_shift")
       .map((c) => `${c.value.split(":")[0]}:${c.personId}`),
   );
+  // Per-day kitchen block: value is the date, so key `date:personId`. Only the
+  // kitchen slot consults this — every other slot stays open to the person.
+  const kitchenBlocked = new Set(
+    input.constraints
+      .filter((c) => c.kind === "blocked_kitchen")
+      .map((c) => `${c.value}:${c.personId}`),
+  );
 
   const nightHist = new Map<number, number>();
   const kitchenHist = new Map<number, number>();
@@ -110,6 +117,7 @@ export function generateWeek(input: GenerateInput): GenerateResult {
             (isTimeShift
               ? !shiftOff.has(`${date}:${slot}:${p.id}`)
               : !anyShiftOff.has(`${date}:${p.id}`)) &&
+            !(slot === "kitchen" && kitchenBlocked.has(`${date}:${p.id}`)) &&
             !sleptOff?.has(p.id) &&
             !busyOn.get(date)?.has(p.id),
         );

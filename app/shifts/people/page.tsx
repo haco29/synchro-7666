@@ -4,6 +4,7 @@ import {
   blockWeekAction,
   linkPersonAction,
   setPersonActiveAction,
+  toggleKitchenBlockAction,
   toggleMyShiftUnavailabilityAction,
   toggleMyUnavailabilityAction,
   toggleShiftUnavailableAction,
@@ -47,24 +48,32 @@ const FREE_CLASSES =
  * are injected so the same cell serves an admin editing anyone and a member
  * editing only themselves. A whole-day off subsumes the shifts, so the shift
  * buttons are disabled (and dimmed) while it's set.
+ *
+ * `kitchenAction` is optional and admin-only: when provided, an extra "K"
+ * toggle blocks the person from KITCHEN duty that day while leaving their
+ * time-shifts open. Members never receive it, so the control is hidden for them.
  */
 function AvailabilityCell({
   dayAction,
   shiftAction,
+  kitchenAction,
   personId,
   personName,
   date,
   dayOff,
   shiftOffOf,
+  kitchenBlocked = false,
   active,
 }: {
   dayAction: (formData: FormData) => Promise<void>;
   shiftAction: (formData: FormData) => Promise<void>;
+  kitchenAction?: (formData: FormData) => Promise<void>;
   personId: number;
   personName: string;
   date: string;
   dayOff: boolean;
   shiftOffOf: (shift: ShiftType) => boolean;
+  kitchenBlocked?: boolean;
   active: boolean;
 }) {
   return (
@@ -106,6 +115,23 @@ function AvailabilityCell({
             </form>
           );
         })}
+        {kitchenAction && (
+          <form action={kitchenAction}>
+            <input type="hidden" name="personId" value={personId} />
+            <input type="hidden" name="date" value={date} />
+            <input type="hidden" name="blocked" value={kitchenBlocked ? "0" : "1"} />
+            <button
+              type="submit"
+              disabled={!active || dayOff}
+              aria-pressed={kitchenBlocked}
+              aria-label={`${personName} ${kitchenBlocked ? "blocked from" : "available for"} ${SLOT_LABELS.kitchen} on ${dayLabel(date)}`}
+              title={`${SLOT_LABELS.kitchen} — ${kitchenBlocked ? "blocked, click to clear" : "click to block"}`}
+              className={`h-6 w-6 rounded border text-[10px] disabled:opacity-40 ${kitchenBlocked ? OFF_CLASSES : FREE_CLASSES}`}
+            >
+              K
+            </button>
+          </form>
+        )}
       </div>
     </div>
   );
@@ -168,9 +194,12 @@ export default async function PeoplePage({
   // `${date}:${shift}:${personId}` (the shift value is already `date:shift`).
   const dayOff = new Set<string>();
   const shiftOff = new Set<string>();
+  // Per-day kitchen block, keyed `${date}:${personId}` (value is the date).
+  const kitchenBlocked = new Set<string>();
   for (const c of constraints) {
     if (c.kind === "unavailable_date") dayOff.add(`${c.value}:${c.personId}`);
     else if (c.kind === "unavailable_shift") shiftOff.add(`${c.value}:${c.personId}`);
+    else if (c.kind === "blocked_kitchen") kitchenBlocked.add(`${c.value}:${c.personId}`);
   }
   const dates = weekDates(weekStart);
 
@@ -200,6 +229,7 @@ export default async function PeoplePage({
       members={members}
       dayOff={dayOff}
       shiftOff={shiftOff}
+      kitchenBlocked={kitchenBlocked}
     />
   );
 }
@@ -277,6 +307,7 @@ function AdminView({
   members,
   dayOff,
   shiftOff,
+  kitchenBlocked,
 }: {
   weekStart: string;
   dates: string[];
@@ -284,6 +315,7 @@ function AdminView({
   members: OrgMember[];
   dayOff: Set<string>;
   shiftOff: Set<string>;
+  kitchenBlocked: Set<string>;
 }) {
   return (
     <div className="space-y-8">
@@ -314,6 +346,7 @@ function AdminView({
           Mark when each person is <strong>unavailable</strong> this week — a whole day, or a
           single shift (<strong>M</strong>orning / <strong>E</strong>vening / <strong>N</strong>ight).
           Kitchen and backup need a full day free — any block, whole-day or a single shift, rules them out that day.
+          The <strong>K</strong> toggle blocks only <strong>kitchen</strong> duty that day, leaving the person free for their normal shifts.
         </p>
 
         {people.length === 0 ? (
@@ -362,11 +395,13 @@ function AdminView({
                         <AvailabilityCell
                           dayAction={toggleUnavailableAction}
                           shiftAction={toggleShiftUnavailableAction}
+                          kitchenAction={toggleKitchenBlockAction}
                           personId={p.id}
                           personName={p.name}
                           date={date}
                           dayOff={dayOff.has(`${date}:${p.id}`)}
                           shiftOffOf={(shift) => shiftOff.has(`${date}:${shift}:${p.id}`)}
+                          kitchenBlocked={kitchenBlocked.has(`${date}:${p.id}`)}
                           active={p.active}
                         />
                       </td>

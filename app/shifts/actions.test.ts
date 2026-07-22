@@ -27,6 +27,7 @@ import {
   clearSlotAction,
   generateWeekAction,
   linkPersonAction,
+  toggleKitchenBlockAction,
   toggleMyShiftUnavailabilityAction,
   toggleMyUnavailabilityAction,
   toggleShiftUnavailableAction,
@@ -344,6 +345,36 @@ describe("toggleMyShiftUnavailabilityAction (member self)", () => {
     await expect(
       toggleMyShiftUnavailabilityAction(
         form({ personId: String(personId), date: "2026-07-14", shift: "night", unavailable: "1" }),
+      ),
+    ).rejects.toThrow();
+    expect(await q.listConstraintsForWeek(teamId, "2026-07-12")).toHaveLength(0);
+  });
+});
+
+describe("toggleKitchenBlockAction (admin)", () => {
+  it("blocks a person from kitchen on a day, then clears it", async () => {
+    stubAuth({ userId: "admin_1", orgId: "org_A", orgRole: "org:admin" });
+    await toggleKitchenBlockAction(
+      form({ personId: String(personId), date: "2026-07-14", blocked: "1" }),
+    );
+    const cons = await q.listConstraintsForWeek(teamId, "2026-07-12");
+    expect(cons).toHaveLength(1);
+    expect(cons[0]).toMatchObject({
+      personId,
+      kind: "blocked_kitchen",
+      value: "2026-07-14",
+    });
+    await toggleKitchenBlockAction(
+      form({ personId: String(personId), date: "2026-07-14", blocked: "0" }),
+    );
+    expect(await q.listConstraintsForWeek(teamId, "2026-07-12")).toHaveLength(0);
+  });
+
+  it("rejects a member (non-admin)", async () => {
+    stubAuth({ userId: "member_1", orgId: "org_A", orgRole: "org:member" });
+    await expect(
+      toggleKitchenBlockAction(
+        form({ personId: String(personId), date: "2026-07-14", blocked: "1" }),
       ),
     ).rejects.toThrow();
     expect(await q.listConstraintsForWeek(teamId, "2026-07-12")).toHaveLength(0);

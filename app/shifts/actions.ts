@@ -15,6 +15,7 @@ import {
   removeAssignment,
   renamePerson,
   replaceWeekAssignments,
+  setKitchenBlocked,
   setPersonActive,
   setPersonRotation,
   setUnavailable,
@@ -212,6 +213,21 @@ export async function toggleMyShiftUnavailabilityAction(formData: FormData) {
     requireDate(formData.get("date")),
     requireShift(formData.get("shift")),
     formData.get("unavailable") === "1",
+  );
+  revalidatePath("/shifts", "layout");
+}
+
+/**
+ * Admin-only: block or clear a person's kitchen duty for a single day. There is
+ * no member self-service variant — a kitchen exemption is a manager's call.
+ */
+export async function toggleKitchenBlockAction(formData: FormData) {
+  const { teamId } = await requireAdmin();
+  await setKitchenBlocked(
+    teamId,
+    requireId(formData.get("personId")),
+    requireDate(formData.get("date")),
+    formData.get("blocked") === "1",
   );
   revalidatePath("/shifts", "layout");
 }

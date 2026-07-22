@@ -212,6 +212,31 @@ describe("per-shift constraints", () => {
   });
 });
 
+describe("kitchen block", () => {
+  it("stores and clears a per-day kitchen block within the week window", async () => {
+    await q.addPerson(teamA, "Alice");
+    const alice = (await q.listPeople(teamA))[0];
+    await q.setKitchenBlocked(teamA, alice.id, "2026-07-14", true);
+    await q.setKitchenBlocked(teamA, alice.id, "2026-07-20", true); // next week
+    const week = await q.listConstraintsForWeek(teamA, "2026-07-12");
+    expect(week).toHaveLength(1);
+    expect(week[0]).toMatchObject({
+      personId: alice.id,
+      kind: "blocked_kitchen",
+      value: "2026-07-14",
+    });
+    await q.setKitchenBlocked(teamA, alice.id, "2026-07-14", false);
+    expect(await q.listConstraintsForWeek(teamA, "2026-07-12")).toHaveLength(0);
+  });
+
+  it("does not touch another team's person (tenancy guard)", async () => {
+    await q.addPerson(teamB, "Zoe");
+    const zoe = (await q.listPeople(teamB))[0];
+    await q.setKitchenBlocked(teamA, zoe.id, "2026-07-14", true); // wrong team
+    expect(await q.listConstraintsForWeek(teamB, "2026-07-12")).toHaveLength(0);
+  });
+});
+
 describe("block whole week", () => {
   it("marks all 7 days of the week off, then clears them", async () => {
     await q.addPerson(teamA, "Alice");

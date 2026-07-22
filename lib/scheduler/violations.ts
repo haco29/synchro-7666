@@ -59,6 +59,12 @@ export function computeViolations(
       .filter((c) => c.kind === "unavailable_shift")
       .map((c) => `${c.value.split(":")[0]}:${c.personId}`),
   );
+  // Per-day kitchen block: keyed `date:personId`, consulted only for kitchen.
+  const kitchenBlocked = new Set(
+    constraints
+      .filter((c) => c.kind === "blocked_kitchen")
+      .map((c) => `${c.value}:${c.personId}`),
+  );
   for (const a of assignments) {
     const fullDaySlot = a.slot === "kitchen" || a.slot === "backup";
     if (
@@ -72,6 +78,15 @@ export function computeViolations(
         slot: a.slot,
         personId: a.personId,
         message: `${nameOf(a.personId)} is marked unavailable for ${a.slot} on ${dayLabel(a.date)}`,
+      });
+    }
+    if (a.slot === "kitchen" && kitchenBlocked.has(`${a.date}:${a.personId}`)) {
+      violations.push({
+        kind: "kitchen_blocked",
+        date: a.date,
+        slot: a.slot,
+        personId: a.personId,
+        message: `${nameOf(a.personId)} is blocked from kitchen duty on ${dayLabel(a.date)}`,
       });
     }
   }

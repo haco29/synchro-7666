@@ -124,6 +124,54 @@ describe("computeViolations", () => {
     expect(computeViolations(assignments, [], people)).toEqual([]);
   });
 
+  it("flags a kitchen assignment on a day the person is blocked from kitchen", () => {
+    const constraints: Constraint[] = [
+      { id: 1, personId: 1, kind: "blocked_kitchen", value: "2026-07-14" },
+    ];
+    const assignments: Assignment[] = [
+      { date: "2026-07-14", slot: "kitchen", personId: 1 },
+    ];
+    const violations = computeViolations(assignments, constraints, people);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toMatchObject({
+      kind: "kitchen_blocked",
+      date: "2026-07-14",
+      slot: "kitchen",
+      personId: 1,
+    });
+    expect(violations[0].message).toContain("Alice");
+  });
+
+  it("does not flag the kitchen block on a different date or a different person", () => {
+    const constraints: Constraint[] = [
+      { id: 1, personId: 1, kind: "blocked_kitchen", value: "2026-07-14" },
+    ];
+    const assignments: Assignment[] = [
+      // Same person, kitchen on a day they are NOT blocked.
+      { date: "2026-07-15", slot: "kitchen", personId: 1 },
+      // Someone else's kitchen on the blocked date.
+      { date: "2026-07-14", slot: "kitchen", personId: 2 },
+    ];
+    expect(computeViolations(assignments, constraints, people)).toEqual([]);
+  });
+
+  it("does not flag the blocked person's other shifts on the blocked day", () => {
+    const constraints: Constraint[] = [
+      { id: 1, personId: 1, kind: "blocked_kitchen", value: "2026-07-14" },
+    ];
+    const assignments: Assignment[] = [
+      { date: "2026-07-14", slot: "morning", personId: 1 },
+      { date: "2026-07-14", slot: "night", personId: 1 },
+    ];
+    // The block is kitchen-only; morning/evening/night that day are fine.
+    // (Two assignments the same day is a separate double_booked concern.)
+    expect(
+      computeViolations(assignments, constraints, people).filter(
+        (v) => v.kind === "kitchen_blocked",
+      ),
+    ).toEqual([]);
+  });
+
   it("flags a blocked time-shift and any kitchen/backup that day, but not the other time-shifts", () => {
     const constraints: Constraint[] = [
       { id: 1, personId: 1, kind: "unavailable_shift", value: "2026-07-13:morning" },

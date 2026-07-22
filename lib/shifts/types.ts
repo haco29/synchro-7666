@@ -38,14 +38,20 @@ export interface Person {
  *   one time-shift (morning/evening/night) — still eligible for the OTHER
  *   time-shifts, but NOT for kitchen or backup, which require full-day
  *   availability, so any per-shift block that day rules them out.
+ * - `blocked_kitchen`: value is an ISO date; the person may not be assigned
+ *   KITCHEN duty that day — but stays eligible for every other slot (their
+ *   normal time-shifts and backup).
  */
-export type ConstraintKind = "unavailable_date" | "unavailable_shift";
+export type ConstraintKind = "unavailable_date" | "unavailable_shift" | "blocked_kitchen";
 
 export interface Constraint {
   id: number;
   personId: number;
   kind: ConstraintKind;
-  /** ISO date (`unavailable_date`) or `YYYY-MM-DD:<shift>` (`unavailable_shift`). */
+  /**
+   * ISO date (`unavailable_date`, `blocked_kitchen`) or `YYYY-MM-DD:<shift>`
+   * (`unavailable_shift`).
+   */
   value: string;
 }
 
@@ -96,7 +102,8 @@ export type ViolationKind =
   | "double_booked"
   | "unavailable"
   | "kitchen_after_night"
-  | "morning_after_night";
+  | "morning_after_night"
+  | "kitchen_blocked";
 
 export interface Violation {
   kind: ViolationKind;
