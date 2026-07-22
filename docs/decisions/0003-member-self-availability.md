@@ -1,25 +1,30 @@
 # ADR-0003: Member self-service availability via an admin-set person↔user link
 
 ## Status
+
 Accepted
 
 ## Date
+
 2026-07-14
 
 ## Context
+
 [ADR-0002](0002-auth-clerk-org-multitenancy.md) established two deliberate positions:
-- **No `users` table** — Clerk owns identity; `people` are schedulable *subjects*, a separate
+
+- **No `users` table** — Clerk owns identity; `people` are schedulable _subjects_, a separate
   concept from Clerk users, with no link between them.
 - **Roles are binary** — `org:admin` mutates everything; a member (`org:member`) is a read-only
   viewer.
 
 A new requirement breaks the second position and forces a crack in the first: a **member should be
 able to manage their own unavailability** (and only their own) without any other admin power. To do
-that, the app must answer a question it previously couldn't — *which `people` row is this
-logged-in member?* — because a member authenticates as a Clerk `userId` while the roster is just
+that, the app must answer a question it previously couldn't — _which `people` row is this
+logged-in member?_ — because a member authenticates as a Clerk `userId` while the roster is just
 names.
 
 ## Decision
+
 Add an **explicit, admin-set link** from a person to a Clerk user, and a single narrow member write
 on top of it.
 
@@ -35,8 +40,8 @@ on top of it.
   that already governs `team_id`.
 - **Member write scope is exactly one thing:** toggling their own `unavailable_date` constraints.
   No assignments, roster, activation, or publish. The mutation reuses `setUnavailable()`; only the
-  *authorization* differs from the admin path. *(Widened 2026-07-15 to per-shift and whole-week
-  availability — see the Amendment below. The scope is still "own availability only".)*
+  _authorization_ differs from the admin path. _(Widened 2026-07-15 to per-shift and whole-week
+  availability — see the Amendment below. The scope is still "own availability only".)_
 - **Unlinked members stay read-only** (unchanged from ADR-0002). Relinking a Clerk user moves the
   link (last-write-wins). No time cutoff: a member may edit any date; conflicts with an existing
   assignment surface as the existing non-blocking violation warnings and never auto-remove a seat.
@@ -44,20 +49,24 @@ on top of it.
 ## Alternatives Considered
 
 ### Match member → person by email
+
 - Pro: no admin step, no new column semantics.
 - Rejected: couples identity to a mutable attribute, breaks if a person's roster name/email drift,
   and makes the link implicit and hard to audit. An explicit column is auditable and stable.
 
 ### Self-claim (member picks their own name on first login)
+
 - Pro: no admin work.
 - Rejected: lets a member assert who they are — the opposite of the "derive identity server-side,
   never trust the client" invariant. Admin-set keeps the mapping authoritative.
 
 ### Widen member writes generally / add a third role
+
 - Rejected as scope creep. The requirement is precisely "own unavailability"; a minimal capability
   is easier to reason about and to keep safe.
 
 ## Consequences
+
 - **`people` now carries a Clerk link — but is still not a `users` table.** Identity and membership
   remain Clerk's; `clerk_user_id` is only a pointer for the one member-write path. Most `people`
   rows are unlinked and scheduled normally.

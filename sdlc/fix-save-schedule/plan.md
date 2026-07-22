@@ -96,13 +96,13 @@ confirms, Generate doesn't. `pnpm test`, `tsc --noEmit`, `lint`, `build` all pas
 
 ## Risks and Mitigations
 
-| Risk | Impact | Mitigation |
-|------|--------|------------|
-| Routing one `<select>` to two different Server Actions (assign vs clear) is awkward | Med | Decide the wiring in Task 3: set the form's `action` based on selected value before `requestSubmit()`, or keep two hidden forms and submit the matching one. Browser-verify both paths. |
-| `revalidatePath` round-trip makes silent save feel laggy | Low | Out of scope per spec; note in review whether a pending indicator is a needed follow-up. |
-| Removing the guard lets Regenerate silently overwrite manual edits | Med | That is the intent; the Task 2 confirm is the compensating control. Verify cancel truly aborts. |
-| Selecting the current value fires a no-op submit (onChange only fires on real change) | Low | `onChange` doesn't fire when the value is unchanged; acceptable. Verify no spurious writes. |
-| `weeks.published` column left unused could confuse future readers | Low | Documented in spec Open Questions as a follow-up cleanup migration. |
+| Risk                                                                                  | Impact | Mitigation                                                                                                                                                                              |
+| ------------------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Routing one `<select>` to two different Server Actions (assign vs clear) is awkward   | Med    | Decide the wiring in Task 3: set the form's `action` based on selected value before `requestSubmit()`, or keep two hidden forms and submit the matching one. Browser-verify both paths. |
+| `revalidatePath` round-trip makes silent save feel laggy                              | Low    | Out of scope per spec; note in review whether a pending indicator is a needed follow-up.                                                                                                |
+| Removing the guard lets Regenerate silently overwrite manual edits                    | Med    | That is the intent; the Task 2 confirm is the compensating control. Verify cancel truly aborts.                                                                                         |
+| Selecting the current value fires a no-op submit (onChange only fires on real change) | Low    | `onChange` doesn't fire when the value is unchanged; acceptable. Verify no spurious writes.                                                                                             |
+| `weeks.published` column left unused could confuse future readers                     | Low    | Documented in spec Open Questions as a follow-up cleanup migration.                                                                                                                     |
 
 ## Open Questions
 
@@ -110,6 +110,7 @@ confirms, Generate doesn't. `pnpm test`, `tsc --noEmit`, `lint`, `build` all pas
   its query functions/tests; whether silent-save needs a subtle pending indicator.
 
 ## SDLC Command Coverage
+
 - [x] /spec completed
 - [x] /plan completed
 - [x] /build completed

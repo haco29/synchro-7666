@@ -61,11 +61,7 @@ export function readSourceDb(dbPath: string): SeedSource {
  */
 export async function seed(db: Db, source: SeedSource): Promise<{ teamId: number }> {
   let team = (
-    await db
-      .select()
-      .from(schema.teams)
-      .where(eq(schema.teams.name, DEFAULT_TEAM_NAME))
-      .limit(1)
+    await db.select().from(schema.teams).where(eq(schema.teams.name, DEFAULT_TEAM_NAME)).limit(1)
   )[0];
 
   if (!team) {

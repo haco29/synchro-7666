@@ -31,10 +31,7 @@ describe("schema (initial migration)", () => {
 
   it("enforces unique person name within a team", async () => {
     const { db } = await freshDb();
-    const [team] = await db
-      .insert(schema.teams)
-      .values({ name: "Team A" })
-      .returning();
+    const [team] = await db.insert(schema.teams).values({ name: "Team A" }).returning();
 
     await db.insert(schema.people).values({ teamId: team.id, name: "Dana" });
 
@@ -45,14 +42,8 @@ describe("schema (initial migration)", () => {
 
   it("allows the same person name across different teams", async () => {
     const { db } = await freshDb();
-    const [a] = await db
-      .insert(schema.teams)
-      .values({ name: "Team A" })
-      .returning();
-    const [b] = await db
-      .insert(schema.teams)
-      .values({ name: "Team B" })
-      .returning();
+    const [a] = await db.insert(schema.teams).values({ name: "Team A" }).returning();
+    const [b] = await db.insert(schema.teams).values({ name: "Team B" }).returning();
 
     await db.insert(schema.people).values({ teamId: a.id, name: "Dana" });
     await expect(
@@ -76,23 +67,16 @@ describe("schema (initial migration)", () => {
     const { db } = await freshDb();
     const [team] = await db.insert(schema.teams).values({ name: "Team A" }).returning();
 
-    await db
-      .insert(schema.people)
-      .values({ teamId: team.id, name: "Dana", clerkUserId: "user_1" });
+    await db.insert(schema.people).values({ teamId: team.id, name: "Dana", clerkUserId: "user_1" });
 
     await expect(
-      db
-        .insert(schema.people)
-        .values({ teamId: team.id, name: "Roni", clerkUserId: "user_1" }),
+      db.insert(schema.people).values({ teamId: team.id, name: "Roni", clerkUserId: "user_1" }),
     ).rejects.toThrow();
   });
 
   it("enforces one week_start per team", async () => {
     const { db } = await freshDb();
-    const [team] = await db
-      .insert(schema.teams)
-      .values({ name: "Team A" })
-      .returning();
+    const [team] = await db.insert(schema.teams).values({ name: "Team A" }).returning();
 
     await db.insert(schema.weeks).values({ teamId: team.id, weekStart: "2026-07-19" });
 
@@ -103,17 +87,12 @@ describe("schema (initial migration)", () => {
 
   it("cascades deletes from team → people → constraints, and team → weeks → assignments", async () => {
     const { db, client } = await freshDb();
-    const [team] = await db
-      .insert(schema.teams)
-      .values({ name: "Team A" })
-      .returning();
+    const [team] = await db.insert(schema.teams).values({ name: "Team A" }).returning();
     const [person] = await db
       .insert(schema.people)
       .values({ teamId: team.id, name: "Dana" })
       .returning();
-    await db
-      .insert(schema.constraints)
-      .values({ personId: person.id, value: "2026-07-14" });
+    await db.insert(schema.constraints).values({ personId: person.id, value: "2026-07-14" });
     const [week] = await db
       .insert(schema.weeks)
       .values({ teamId: team.id, weekStart: "2026-07-19" })

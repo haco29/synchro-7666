@@ -1,10 +1,4 @@
-import type {
-  Assignment,
-  Gap,
-  GenerateInput,
-  GenerateResult,
-  SlotType,
-} from "../shifts/types";
+import type { Assignment, Gap, GenerateInput, GenerateResult, SlotType } from "../shifts/types";
 import { SLOT_CAPACITY } from "../shifts/types";
 import { addDays, weekDates } from "../shifts/week";
 
@@ -106,9 +100,7 @@ export function generateWeek(input: GenerateInput): GenerateResult {
       // puts night before both, so the previous day's night is always known.)
       const isTimeShift = slot !== "kitchen" && slot !== "backup";
       const sleptOff =
-        slot === "kitchen" || slot === "morning"
-          ? nightOn.get(addDays(date, -1))
-          : undefined;
+        slot === "kitchen" || slot === "morning" ? nightOn.get(addDays(date, -1)) : undefined;
       for (let seat = 0; seat < SLOT_CAPACITY[slot]; seat++) {
         const candidates = input.people.filter(
           (p) =>

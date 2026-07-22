@@ -16,6 +16,7 @@
   - [x] First-time Generate (empty week) submits with no confirm
 
 ## Checkpoint: Publish removed, regenerate guarded
+
 - [x] `pnpm test`, `tsc --noEmit`, `lint`, `build` green
 - [x] Browser: no Publish button
 - [x] Browser: Regenerate shows confirm; cancel leaves assignments unchanged
@@ -31,6 +32,7 @@
   - [x] Preserve action inputs + violation/inactive-holder styling
 
 ## Checkpoint: Complete
+
 - [x] Browser: picking a person saves (no ✓) — verified: assigned דור, persisted after reload
 - [x] Browser: picking "— unfilled —" clears (no ✗) — verified: cleared seat, persisted after reload
 - [x] Browser: no Publish button; Regenerate confirms (cancel aborts, accept regenerates), Generate doesn't
@@ -38,6 +40,7 @@
 - [x] Ready for review
 
 ## Addendum — week anchor Wednesday → Thursday (added to this branch on request)
+
 - Out of the original spec scope; user opted to bundle it here. `WEEK_START_DOW` 3 → 4 in
   `lib/shifts/week.ts` (+ comments); weeks now run **Thursday–Wednesday**.
 - Updated hardcoded-date tests: `lib/shifts/week.test.ts` (weekStartOf/weekDates), `actions.ts`
@@ -48,12 +51,14 @@
 - Verified: `pnpm test` (126), `tsc` clean; live app shows the week running חמישי (Thu) → רביעי (Wed).
 
 ## Addendum — default to the current week (added on request)
+
 - Schedule landing (`app/shifts/page.tsx`) and the People page default (`app/shifts/people/page.tsx`)
   now open `weekStartOf(todayIso())` — the week containing today — instead of the upcoming week
   (`addDays(..., 7)`). Dropped the now-unused `addDays` import in both; updated the `ShiftsNav`
   fallback comment. Verified: `/shifts` and `/shifts/people` both land on the current week.
 
 ## Addendum — preserve current week across Schedule ↔ People nav (added on request)
+
 - Extracted the header nav into a `"use client"` `ShiftsNav` (`app/shifts/_components/shifts-nav.tsx`)
   that reads the current week from the URL (`/shifts/week/<start>` path or `?week=<start>` query)
   and threads it into both links; falls back to defaults when no week is in the URL.
@@ -63,6 +68,7 @@
   to the same `/shifts/week/<start>`; round-trip stays on the same week. `tsc`/`lint`/`build` green.
 
 ## /review — applied fix
+
 - Made the seat `<select>` **controlled** and added `persist()` — on a rejected save it logs,
   reverts the optimistic pick, and `router.refresh()`es. Fixes both review `Consider`s: the
   swallowed rejection (was `void action(...)`) and the UI/DB desync on a no-op/failed save.
@@ -71,6 +77,7 @@
 - `pnpm test` (126), `tsc`, `lint` (0 errors), `build` all green after the fix.
 
 ## /test — added coverage
+
 - `generateWeekAction`: generates even when the week is flagged published (guard-gone; RED→GREEN in /build).
 - `assignSlotAction`: assigns to an empty seat; swaps holder with `previousPersonId`; rejects non-admin.
 - `clearSlotAction`: empties a filled seat; rejects non-admin (seat stays filled).
@@ -80,6 +87,7 @@
   Generate no-confirm).
 
 ## Notes for review / commit
+
 - `weeks.published` column, `isWeekPublished`/`setWeekPublished`/`listPublishedWeeks`, and their
   `queries.test.ts` coverage are intentionally **kept** (no migration). Only the app call sites were
   removed. Follow-up: a cleanup migration could drop them later.

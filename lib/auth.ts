@@ -18,7 +18,11 @@ type Db = LibSQLDatabase<typeof schema>;
 /** The internal team id linked to a Clerk org, or undefined if none is linked yet. */
 async function findTeamByOrg(db: Db, orgId: string): Promise<number | undefined> {
   const row = (
-    await db.select({ id: schema.teams.id }).from(schema.teams).where(eq(schema.teams.clerkOrgId, orgId)).limit(1)
+    await db
+      .select({ id: schema.teams.id })
+      .from(schema.teams)
+      .where(eq(schema.teams.clerkOrgId, orgId))
+      .limit(1)
   )[0];
   return row?.id;
 }

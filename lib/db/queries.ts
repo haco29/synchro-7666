@@ -105,11 +105,7 @@ export async function renamePerson(teamId: number, id: number, name: string): Pr
   }
 }
 
-export async function setPersonActive(
-  teamId: number,
-  id: number,
-  active: boolean,
-): Promise<void> {
+export async function setPersonActive(teamId: number, id: number, active: boolean): Promise<void> {
   await getDb()
     .update(people)
     .set({ active })
@@ -571,10 +567,7 @@ export async function removeAssignment(
 // ---- history (cross-week fairness) ----
 
 /** Cumulative counts per person from all of the team's weeks before `weekStart`. */
-export async function historyBefore(
-  teamId: number,
-  weekStart: string,
-): Promise<PersonHistory[]> {
+export async function historyBefore(teamId: number, weekStart: string): Promise<PersonHistory[]> {
   const rows = await getDb()
     .select({
       personId: assignments.personId,

@@ -25,21 +25,21 @@ The blocker this solves: a member signs in as a Clerk identity (`userId`) but th
   only state in which a member has anything to write.
 - **Unlinked member** — a signed-in Clerk member not matched to any `people` row. Read-only viewer,
   exactly as members are today.
-- **Self-service availability** — the single write a member is granted: toggling *their own*
+- **Self-service availability** — the single write a member is granted: toggling _their own_
   `unavailable_date` constraints. No assignments, roster, or publish access.
 - **Roster-only person** — a `people` row with no `clerk_user_id` (no Clerk account behind it).
   Scheduled normally by the admin; simply has no self-service until/unless linked.
 
 ### Decisions (locked)
 
-| # | Decision |
-|---|---|
-| D1 | **Member↔person link** is an explicit, admin-set `people.clerk_user_id` column (nullable, unique). Not email-matched, not self-claimed. |
-| D2 | **Member write scope** is *only* their own `unavailable_date` constraints. No assignments, roster edits, activation, or publish. |
-| D3 | **Unlinked signed-in member** is a **read-only viewer** (sees schedule, edits nothing) until an admin links them. No new wall. |
-| D4 | **No time cutoff** — a member may toggle any date (past/future, published or not). Conflicts surface via the existing non-blocking amber warnings for the admin; adding a constraint never auto-removes an assignment. |
-| D5 | **Admin links via a dropdown of real Clerk org members** (`clerkClient().organizations.getOrganizationMembershipList`). Roster-only people with no Clerk account stay unlinked; **no invite flow** in this scope. |
-| D6 | **Member surface is the role-aware People page** — a member sees only their own linked row; an admin sees the full grid. A **new `requireMember()`-scoped Server Action** resolves the caller's linked person **server-side** and rejects any `personId` that isn't theirs. |
+| #   | Decision                                                                                                                                                                                                                                                                    |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D1  | **Member↔person link** is an explicit, admin-set `people.clerk_user_id` column (nullable, unique). Not email-matched, not self-claimed.                                                                                                                                     |
+| D2  | **Member write scope** is _only_ their own `unavailable_date` constraints. No assignments, roster edits, activation, or publish.                                                                                                                                            |
+| D3  | **Unlinked signed-in member** is a **read-only viewer** (sees schedule, edits nothing) until an admin links them. No new wall.                                                                                                                                              |
+| D4  | **No time cutoff** — a member may toggle any date (past/future, published or not). Conflicts surface via the existing non-blocking amber warnings for the admin; adding a constraint never auto-removes an assignment.                                                      |
+| D5  | **Admin links via a dropdown of real Clerk org members** (`clerkClient().organizations.getOrganizationMembershipList`). Roster-only people with no Clerk account stay unlinked; **no invite flow** in this scope.                                                           |
+| D6  | **Member surface is the role-aware People page** — a member sees only their own linked row; an admin sees the full grid. A **new `requireMember()`-scoped Server Action** resolves the caller's linked person **server-side** and rejects any `personId` that isn't theirs. |
 
 ### Target users
 
@@ -55,12 +55,12 @@ The blocker this solves: a member signs in as a Clerk identity (`userId`) but th
 No new CLI commands. This is a schema change (one column) + auth/UI work, so the existing DB
 workflow applies:
 
-| Command | Purpose |
-|---|---|
-| `pnpm db:generate` | Generate the migration for the new `people.clerk_user_id` column. |
-| `pnpm db:migrate` | Apply the migration to **each** target DB (local `dev.db` **and** hosted Turso) separately — migrations are **not** automatic (per [architecture.md](../../docs/architecture.md)). |
-| `pnpm dev` | Run locally to exercise both admin-link and member-toggle flows. |
-| `pnpm test` | Run the auth + query unit tests (see §5). |
+| Command            | Purpose                                                                                                                                                                            |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm db:generate` | Generate the migration for the new `people.clerk_user_id` column.                                                                                                                  |
+| `pnpm db:migrate`  | Apply the migration to **each** target DB (local `dev.db` **and** hosted Turso) separately — migrations are **not** automatic (per [architecture.md](../../docs/architecture.md)). |
+| `pnpm dev`         | Run locally to exercise both admin-link and member-toggle flows.                                                                                                                   |
+| `pnpm test`        | Run the auth + query unit tests (see §5).                                                                                                                                          |
 
 ---
 
@@ -112,7 +112,7 @@ a direct test of them:
   `requireMember()`; `linkPersonAction`/`unlinkPersonAction` call `requireAdmin()`. The proxy alone
   is insufficient (POST-reachable).
 - **Reuse, don't fork, the write path.** Member toggle reuses `setUnavailable()` after the
-  own-person check — the difference is *authorization*, not the mutation.
+  own-person check — the difference is _authorization_, not the mutation.
 - **Clerk member list is server-only.** `getOrganizationMembershipList` runs in a server context;
   no membership data reaches the client bundle beyond what the link dropdown renders.
 
@@ -120,7 +120,7 @@ a direct test of them:
 
 ## 5. Testing Strategy
 
-- **Own-person enforcement (core):** a linked member toggling their *own* date succeeds; the same
+- **Own-person enforcement (core):** a linked member toggling their _own_ date succeeds; the same
   member submitting a **different** `personId` is rejected — even though the form field says
   otherwise (stubbed Clerk `auth()` → known `userId`).
 - **Unlinked member:** a signed-in member with no `clerk_user_id` gets read-only behavior — the
@@ -141,6 +141,7 @@ a direct test of them:
 ## 6. Boundaries
 
 ### Always
+
 - Derive the caller's person from Clerk **server-side**; reject a `personId` that isn't the
   caller's own in the member action.
 - Team-scope the member↔person lookup via `currentTeam()`.
@@ -148,6 +149,7 @@ a direct test of them:
 - Keep member write scope to `unavailable_date` constraints only.
 
 ### Ask first
+
 - Widening member write scope beyond their own unavailability (e.g. self-rename, self-deactivate).
 - Adding an **invite** flow (roster-only person → Clerk invitation) — explicitly out of scope now.
 - Any per-team-uniqueness resolution for `clerk_user_id` that needs a composite index / destructive
@@ -155,6 +157,7 @@ a direct test of them:
 - Changing the linking mechanism away from admin-set explicit link (D1).
 
 ### Never
+
 - Trust a `personId`, `team_id`, or role from client input.
 - Let a member mutate anyone's data but their own unavailability.
 - Let an unlinked member write anything.
@@ -163,10 +166,11 @@ a direct test of them:
 - Auto-remove an assignment when a member marks unavailable (D4 — warnings only).
 
 ### Risks / assumptions
+
 - **`getOrganizationMembershipList` is a new Clerk Backend API dependency.** The app has only ever
-  read the *current caller's* session until now. Assumes `clerkClient()` server usage is available
+  read the _current caller's_ session until now. Assumes `clerkClient()` server usage is available
   in `@clerk/nextjs@7.5.17`; verify against `node_modules/@clerk/nextjs` before building.
-- **Column uniqueness scope.** `clerk_user_id` unique *globally* vs *per team* differs if the app
+- **Column uniqueness scope.** `clerk_user_id` unique _globally_ vs _per team_ differs if the app
   ever allows one Clerk user in multiple orgs. Current model is one-org-per-user (ADR-0002), so
   global-unique is safe today; Q1 tracks the per-team refinement.
 

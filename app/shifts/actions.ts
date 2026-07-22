@@ -105,7 +105,11 @@ export async function renamePersonAction(formData: FormData) {
 
 export async function setPersonActiveAction(formData: FormData) {
   const { teamId } = await requireAdmin();
-  await setPersonActive(teamId, requireId(formData.get("personId")), formData.get("active") === "1");
+  await setPersonActive(
+    teamId,
+    requireId(formData.get("personId")),
+    formData.get("active") === "1",
+  );
   revalidatePath("/shifts", "layout");
 }
 
@@ -280,10 +284,7 @@ export async function generateWeekAction(formData: FormData) {
 
 export async function assignSlotAction(formData: FormData) {
   const { teamId } = await requireAdmin();
-  const { weekStart, date } = requireWeekDate(
-    formData.get("weekStart"),
-    formData.get("date"),
-  );
+  const { weekStart, date } = requireWeekDate(formData.get("weekStart"), formData.get("date"));
   const slot = requireSlot(formData.get("slot"));
   const personId = requireId(formData.get("personId"));
   const previousId = Number(formData.get("previousPersonId"));

@@ -19,8 +19,7 @@ export async function FairnessPanel({
 }) {
   const week = await listAssignments(teamId, weekStart);
   const weekCount = (id: number, slot?: SlotType) =>
-    week.filter((a) => a.personId === id && (slot ? a.slot === slot : true))
-      .length;
+    week.filter((a) => a.personId === id && (slot ? a.slot === slot : true)).length;
   // "Shifts week": only the time-shifts (morning/evening/night) count as a
   // shift worked — kitchen and backup (rest/on-call) are broken out separately.
   const shiftTypes = new Set<SlotType>(SHIFT_TYPES);
@@ -35,15 +34,9 @@ export async function FairnessPanel({
           <thead>
             <tr className="border-b border-neutral-200 text-left dark:border-neutral-800">
               <th className="py-1.5 pr-4 font-medium">Person</th>
-              <th className="px-3 py-1.5 text-center font-medium">
-                Shifts (week)
-              </th>
-              <th className="px-3 py-1.5 text-center font-medium">
-                Kitchen (week)
-              </th>
-              <th className="px-3 py-1.5 text-center font-medium">
-                Backup (week)
-              </th>
+              <th className="px-3 py-1.5 text-center font-medium">Shifts (week)</th>
+              <th className="px-3 py-1.5 text-center font-medium">Kitchen (week)</th>
+              <th className="px-3 py-1.5 text-center font-medium">Backup (week)</th>
             </tr>
           </thead>
           <tbody>
@@ -58,20 +51,11 @@ export async function FairnessPanel({
                   </td>
                 </tr>
                 {group.people.map((p) => (
-                  <tr
-                    key={p.id}
-                    className="border-b border-neutral-100 dark:border-neutral-900"
-                  >
+                  <tr key={p.id} className="border-b border-neutral-100 dark:border-neutral-900">
                     <td className="py-1.5 pr-4 font-medium">{p.name}</td>
-                    <td className="px-3 py-1.5 text-center">
-                      {shiftCount(p.id)}
-                    </td>
-                    <td className="px-3 py-1.5 text-center">
-                      {weekCount(p.id, "kitchen")}
-                    </td>
-                    <td className="px-3 py-1.5 text-center">
-                      {weekCount(p.id, "backup")}
-                    </td>
+                    <td className="px-3 py-1.5 text-center">{shiftCount(p.id)}</td>
+                    <td className="px-3 py-1.5 text-center">{weekCount(p.id, "kitchen")}</td>
+                    <td className="px-3 py-1.5 text-center">{weekCount(p.id, "backup")}</td>
                   </tr>
                 ))}
               </Fragment>

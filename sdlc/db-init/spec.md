@@ -16,9 +16,10 @@ existing routes needed to enforce tenancy. It does **not** change the scheduling
 UI design.
 
 ### Why this is needed now
+
 > **Correction (post-exploration):** an earlier read of the repo wrongly concluded the app was
 > boilerplate with an orphaned DB. It is **not**. The "shifts scheduling" feature is fully built,
-> committed, and tested (see *Existing code being migrated* below). This spec has been revised to
+> committed, and tested (see _Existing code being migrated_ below). This spec has been revised to
 > describe a **migration/rewrite of that working code**, not a greenfield build.
 
 The app already persists data via a **synchronous `node:sqlite` layer** (`lib/db/client.ts` +
@@ -30,6 +31,7 @@ Postgres)." This initiative does that **and** (per the user's decision) adds Cle
 multi-tenancy, rewriting the single-tenant persistence layer to Drizzle + Turso.
 
 ### Existing code being migrated
+
 - **`lib/db/client.ts`** — `node:sqlite` (`DatabaseSync`), inline `CREATE TABLE IF NOT EXISTS`
   schema, auto-seeded `share_token`. → replaced by a libSQL client + Drizzle (Tasks 2, 5).
 - **`lib/db/queries.ts`** — 17 **synchronous** functions (`listPeople`, `addPerson`,
@@ -43,18 +45,20 @@ multi-tenancy, rewriting the single-tenant persistence layer to Drizzle + Turso.
   are a **regression guard**: they must stay green throughout.
 
 ### Selected stack (decided with the user)
+
 Priority is **developer experience over robustness** — justified because the data is tiny,
 cleanly relational, single-tenant today, and has no search/analytics/real-time needs.
 
-| Concern | Decision | Rationale |
-|---|---|---|
-| **Database** | **Turso (libSQL / hosted SQLite)** | Existing SQLite schema ports over almost verbatim; excellent local DX (real SQLite file locally, syncs to cloud); Vercel-native via Marketplace; edge-friendly. Best fit for "DX over robust" + tiny relational data. |
-| **Access layer** | **Drizzle ORM** (`drizzle-orm` + `drizzle-kit`) | Best-in-class TypeScript DX, SQL-like, minimal magic. Provider-agnostic (libSQL adapter today, Postgres later if we outgrow Turso) so it does not lock in the DB choice. |
-| **Runtime access** | Next.js 16 Server Components (reads) + Server Functions/Actions `'use server'` (writes) | Matches this Next version's data model (`node_modules/next/dist/docs/01-app/01-getting-started/{06-fetching-data,07-mutating-data,08-caching}.md`). |
-| **Auth** | **Clerk** (`@clerk/nextjs`) — everyone authenticates | Hosted auth with best-in-class DX and Vercel-native integration. Clerk **Organizations** map onto our `teams`; Clerk **roles** (`org:admin` vs member) distinguish editors from viewers. Clerk owns identity — we do not store passwords or a users table. |
-| **Tenancy** | **Clerk Organization = team; one org per user** | User expects multiple teams eventually and chose one-team-per-user. A user's **active Clerk organization** determines `team_id` for every request. Our `teams` table stores `clerk_org_id` to map Clerk orgs to our rows. |
+| Concern            | Decision                                                                                | Rationale                                                                                                                                                                                                                                                  |
+| ------------------ | --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Database**       | **Turso (libSQL / hosted SQLite)**                                                      | Existing SQLite schema ports over almost verbatim; excellent local DX (real SQLite file locally, syncs to cloud); Vercel-native via Marketplace; edge-friendly. Best fit for "DX over robust" + tiny relational data.                                      |
+| **Access layer**   | **Drizzle ORM** (`drizzle-orm` + `drizzle-kit`)                                         | Best-in-class TypeScript DX, SQL-like, minimal magic. Provider-agnostic (libSQL adapter today, Postgres later if we outgrow Turso) so it does not lock in the DB choice.                                                                                   |
+| **Runtime access** | Next.js 16 Server Components (reads) + Server Functions/Actions `'use server'` (writes) | Matches this Next version's data model (`node_modules/next/dist/docs/01-app/01-getting-started/{06-fetching-data,07-mutating-data,08-caching}.md`).                                                                                                        |
+| **Auth**           | **Clerk** (`@clerk/nextjs`) — everyone authenticates                                    | Hosted auth with best-in-class DX and Vercel-native integration. Clerk **Organizations** map onto our `teams`; Clerk **roles** (`org:admin` vs member) distinguish editors from viewers. Clerk owns identity — we do not store passwords or a users table. |
+| **Tenancy**        | **Clerk Organization = team; one org per user**                                         | User expects multiple teams eventually and chose one-team-per-user. A user's **active Clerk organization** determines `team_id` for every request. Our `teams` table stores `clerk_org_id` to map Clerk orgs to our rows.                                  |
 
 ### Target users (all authenticate via Clerk)
+
 - **Admin/editor** (`org:admin` role) — builds and publishes weekly rotas, manages people and
   constraints for their team.
 - **Viewer** (member role) — signs in and reads their team's published weeks. Per the user's
@@ -67,15 +71,15 @@ cleanly relational, single-tenant today, and has no search/analytics/real-time n
 
 ## 2. Commands
 
-| Command | Purpose |
-|---|---|
-| `pnpm dev` | Run app locally (Next dev server) against the local libSQL file. |
-| `pnpm db:generate` | `drizzle-kit generate` — generate SQL migration from schema changes. |
-| `pnpm db:migrate` | `drizzle-kit migrate` — apply pending migrations to the target DB. |
-| `pnpm db:push` | `drizzle-kit push` — push schema directly (local/dev iteration only). |
-| `pnpm db:studio` | `drizzle-kit studio` — browse/edit data in Drizzle Studio. |
-| `pnpm db:seed` | Run the seed script (default team + migrate existing `data/synchro.db` rows). |
-| `turso db shell <db>` | Ad-hoc SQL against the hosted DB (via Turso CLI). |
+| Command               | Purpose                                                                       |
+| --------------------- | ----------------------------------------------------------------------------- |
+| `pnpm dev`            | Run app locally (Next dev server) against the local libSQL file.              |
+| `pnpm db:generate`    | `drizzle-kit generate` — generate SQL migration from schema changes.          |
+| `pnpm db:migrate`     | `drizzle-kit migrate` — apply pending migrations to the target DB.            |
+| `pnpm db:push`        | `drizzle-kit push` — push schema directly (local/dev iteration only).         |
+| `pnpm db:studio`      | `drizzle-kit studio` — browse/edit data in Drizzle Studio.                    |
+| `pnpm db:seed`        | Run the seed script (default team + migrate existing `data/synchro.db` rows). |
+| `turso db shell <db>` | Ad-hoc SQL against the hosted DB (via Turso CLI).                             |
 
 > Package manager is **pnpm** (repo has `pnpm-lock.yaml` + `pnpm-workspace.yaml`). All new
 > DB scripts are added under `package.json` `scripts`.
@@ -120,19 +124,19 @@ Set the same in Vercel project env (prod + preview).
 
 Derived from the existing SQLite schema, with `teams` added and `team_id` threaded through.
 
-- **`teams`** *(new)* — `id` (PK), `name`, `clerk_org_id` (TEXT, unique — maps to the Clerk
+- **`teams`** _(new)_ — `id` (PK), `name`, `clerk_org_id` (TEXT, unique — maps to the Clerk
   Organization), `share_token` (unique, retained but superseded by auth). `clerk_org_id` is how
   every request resolves its `team_id` from the caller's active Clerk org.
 - **No `users` table.** Clerk is the source of truth for identity and membership; we never store
   passwords or user credentials. Domain rows reference `person_id` (a schedulable subject, not an
   app user) as before — `people` and Clerk users are distinct concepts.
 - **`people`** — `id` (PK), `team_id` (FK→teams), `name`, `active` (default true).
-  Uniqueness of `name` becomes **`UNIQUE(team_id, name)`** (name unique *within a team*).
+  Uniqueness of `name` becomes **`UNIQUE(team_id, name)`** (name unique _within a team_).
 - **`constraints`** — `id` (PK), `person_id` (FK→people, cascade), `kind`
   (default `'unavailable_date'`), `value`. `UNIQUE(person_id, kind, value)`.
 - **`weeks`** — `id` (PK), `team_id` (FK→teams), `week_start` (ISO date),
-  `published` (default false). `UNIQUE(team_id, week_start)`. *(PK moves from `week_start`
-  to a surrogate `id` so `week_start` can repeat across teams.)*
+  `published` (default false). `UNIQUE(team_id, week_start)`. _(PK moves from `week_start`
+  to a surrogate `id` so `week_start` can repeat across teams.)_
 - **`assignments`** — `id` (PK), `week_id` (FK→weeks, cascade), `date`, `slot`,
   `person_id` (FK→people). `UNIQUE(week_id, date, slot, person_id)`. Index on `week_id`.
 - **`settings`** — retained as a generic key/value store for **global** (non-team) config only;
@@ -188,6 +192,7 @@ Derived from the existing SQLite schema, with `teams` added and `team_id` thread
 ## 6. Boundaries
 
 ### Always
+
 - Keep `.env.local` / real credentials out of git; commit `.env.example` only.
 - Commit generated migrations in `drizzle/` to version control.
 - Scope every domain query by the `team_id` resolved from Clerk (`currentTeam()`).
@@ -199,6 +204,7 @@ Derived from the existing SQLite schema, with `teams` added and `team_id` thread
   `proxy.ts`, not `middleware.ts`.
 
 ### Ask first
+
 - Switching the provider away from Turso (e.g. to Neon Postgres) — changes the Drizzle dialect.
 - Switching the auth provider away from Clerk — changes the tenancy/identity model.
 - Any schema change that requires a destructive migration against data with real rows.
@@ -206,6 +212,7 @@ Derived from the existing SQLite schema, with `teams` added and `team_id` thread
 - Removing the `share_token` column/flow entirely (superseded but retained — see Open Questions).
 
 ### Never
+
 - Ship a local SQLite file as the Vercel production database.
 - Hardcode connection strings, DB tokens, or Clerk secret keys in source.
 - Store user passwords or auth credentials in our DB — Clerk owns identity.
@@ -214,6 +221,7 @@ Derived from the existing SQLite schema, with `teams` added and `team_id` thread
 - Expose `share_token` values, DB credentials, or `CLERK_SECRET_KEY` to the client bundle.
 
 ### Risks / assumptions
+
 - **Clerk × Next 16.2.10 compatibility — VERIFIED (Task 0).** `@clerk/nextjs@7.5.17` peer deps
   cover Next `^16.1.0-0` (=16.2.10) + React `~19.2.3` (=19.2.4); installed clean; `tsc` passes on a
   `clerkMiddleware`/`createRouteMatcher`/`auth.protect()` spike. **Consequence:** Next 16 renamed
@@ -252,7 +260,7 @@ Derived from the existing SQLite schema, with `teams` added and `team_id` thread
    admin-provisioned only? Affects onboarding and whether the app calls Clerk's org APIs.
 3. **Role mapping.** Confirm the two roles are Clerk's `org:admin` (editor) and default member
    (viewer). Any need for a third role (e.g. super-admin across teams)?
-4. **Environments.** Separate Turso DBs *and* Clerk instances for dev / Vercel preview / production?
+4. **Environments.** Separate Turso DBs _and_ Clerk instances for dev / Vercel preview / production?
    (Recommend: prod + dev for both; Clerk has separate dev/prod instances by default.)
 5. **Keep `data/synchro.db`?** After import, is the local file retained as the dev DB, or removed
    once Turso is authoritative?

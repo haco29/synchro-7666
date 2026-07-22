@@ -25,13 +25,13 @@ Cross-week fairness balances night and kitchen counts; the generator is seeded b
 
 **Target:** each day is staffed by **5 people**, exactly one per role:
 
-| Role     | Count | Nature                                                            |
-| -------- | ----- | ---------------------------------------------------------------- |
-| morning  | 1     | working shift                                                    |
-| evening  | 1     | working shift                                                    |
-| night    | 1     | working shift                                                    |
-| kitchen  | 1     | working duty                                                     |
-| backup   | 1     | **rotating rest / on-call** — mostly idle; the person's rest day |
+| Role    | Count | Nature                                                           |
+| ------- | ----- | ---------------------------------------------------------------- |
+| morning | 1     | working shift                                                    |
+| evening | 1     | working shift                                                    |
+| night   | 1     | working shift                                                    |
+| kitchen | 1     | working duty                                                     |
+| backup  | 1     | **rotating rest / on-call** — mostly idle; the person's rest day |
 
 The team is small (**~5–6 people**), so on most days nearly everyone holds one of the five roles
 and **backup is effectively each person's rotating rest day**. Larger rosters give surplus people a
@@ -83,10 +83,10 @@ day**. `setUnavailable()` toggles it; members self-serve their own via
 `constraints.kind` / `value` are free `TEXT` — additive, **no schema migration**. Add a second
 kind alongside the existing one:
 
-| Kind                 | Value             | Meaning                                                    |
-| -------------------- | ----------------- | ---------------------------------------------------------- |
-| `unavailable_date`   | `YYYY-MM-DD`      | Off the **whole day** — ineligible for *every* slot incl. kitchen & backup. (Unchanged; existing rows keep this meaning.) |
-| `unavailable_shift`  | `YYYY-MM-DD:<shift>` | Off **one time-shift** (`morning`/`evening`/`night`) — ineligible only for that shift; still eligible for the other shifts, kitchen, and backup. |
+| Kind                | Value                | Meaning                                                                                                                                          |
+| ------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `unavailable_date`  | `YYYY-MM-DD`         | Off the **whole day** — ineligible for _every_ slot incl. kitchen & backup. (Unchanged; existing rows keep this meaning.)                        |
+| `unavailable_shift` | `YYYY-MM-DD:<shift>` | Off **one time-shift** (`morning`/`evening`/`night`) — ineligible only for that shift; still eligible for the other shifts, kitchen, and backup. |
 
 `ConstraintKind` union → `"unavailable_date" | "unavailable_shift"`. The value format for
 `unavailable_shift` is `date:shift`; the existing unique index
@@ -247,7 +247,7 @@ own-person guards on every mutation; no new dependencies.
 ## Known limitations
 
 - **Greedy assignment is not an optimal matching.** The scheduler fills roles greedily (work slots
-  first, backup last), so on a short-staffed day with per-shift constraints it can *strand* a
+  first, backup last), so on a short-staffed day with per-shift constraints it can _strand_ a
   person: e.g. someone blocked from `evening` is left as the last candidate for `evening` (→ a gap)
   when a different assignment would have placed them in an earlier role and filled every work slot.
   Accepted for now — the team is small (~5–6), gaps are surfaced and manually fixable, and the fix

@@ -28,7 +28,7 @@ Fresh Next.js 16.2 repo — everything is greenfield.
   improvement. Gaps (unfillable slots) returned explicitly.
 - **Dates as `YYYY-MM-DD` strings** end to end; week keyed by its Sunday.
 - **Constraints stored as typed rows** (`kind = 'unavailable_date' |
-  'unavailable_weekday'`) so future kinds (blocked shift types, max/week) are
+'unavailable_weekday'`) so future kinds (blocked shift types, max/week) are
   additive.
 - **Share link**: single persistent random token in a `settings` table;
   `/s/[token]` renders only weeks with `published = 1`.
@@ -45,17 +45,17 @@ Task descriptions only — no checkboxes. Live task status lives in `todo.md`.
   (SQLite uses the built-in `node:sqlite`, so no DB dependency is added). Create `lib/shifts/types.ts` (Person, ShiftType, Assignment,
   WeekSchedule, Constraint, GenerateInput/Result) and `lib/shifts/week.ts`
   (Sunday-of-week, week date list, date formatting). Unit tests for week math.
-  *Acceptance:* types compile; `pnpm test` green; `pnpm build` passes.
-  *Verification:* `pnpm test`, `pnpm build`. *Deps:* none. *Size:* S.
+  _Acceptance:_ types compile; `pnpm test` green; `pnpm build` passes.
+  _Verification:_ `pnpm test`, `pnpm build`. _Deps:_ none. _Size:_ S.
 
 - **Task 2: SQLite data layer.** `lib/db/client.ts` (open + migrate schema:
   `people`, `constraints`, `weeks`, `assignments`, `settings` incl. share
   token), `lib/db/queries.ts` (people CRUD, constraints per week, week
   get-or-create, assignment upsert/clear, publish flag, history aggregates:
   cumulative night/kitchen counts per person). Gitignore `data/`.
-  *Acceptance:* queries callable from a scratch script; schema idempotent.
-  *Verification:* `pnpm build`; smoke script inserts/reads.
-  *Deps:* Task 1. *Size:* M.
+  _Acceptance:_ queries callable from a scratch script; schema idempotent.
+  _Verification:_ `pnpm build`; smoke script inserts/reads.
+  _Deps:_ Task 1. _Size:_ M.
 
 - **Task 3: Scheduler engine (pure) + tests.** `lib/scheduler/generate.ts`:
   hard rules (≤1 slot/person/day, respect unavailability, kitchen ≠ on-shift),
@@ -64,8 +64,8 @@ Task descriptions only — no checkboxes. Live task status lives in `todo.md`.
   seeded determinism. Tests: hard-rule compliance on random rosters,
   night-fairness over 4 simulated weeks (max−min ≤ 1 with stable roster),
   gap behavior when infeasible, determinism per seed.
-  *Acceptance:* all spec hard rules enforced; fairness test passes.
-  *Verification:* `pnpm test`. *Deps:* Task 1 (parallel with Task 2). *Size:* M.
+  _Acceptance:_ all spec hard rules enforced; fairness test passes.
+  _Verification:_ `pnpm test`. _Deps:_ Task 1 (parallel with Task 2). _Size:_ M.
 
 ### Checkpoint: Foundation
 
@@ -76,22 +76,22 @@ Task descriptions only — no checkboxes. Live task status lives in `todo.md`.
 - **Task 4: Roster & unavailability page (`/shifts/people`).** Server
   component + Server Actions: add/rename/deactivate person; per-person
   unavailability editor for a selected week (weekday toggles + specific
-  dates). *Acceptance:* full CRUD works in browser; data persists.
-  *Verification:* manual browser flow. *Deps:* Task 2. *Size:* M.
+  dates). _Acceptance:_ full CRUD works in browser; data persists.
+  _Verification:_ manual browser flow. _Deps:_ Task 2. _Size:_ M.
 
 - **Task 5: Week editor — generate & view (`/shifts` + `/shifts/week/[start]`).**
   Week dashboard redirecting to upcoming week; week grid (7 days × 4 slot
   groups) showing assignments and gaps; **Generate** action wiring engine +
   history + constraints; regenerate replaces unpublished assignments.
-  *Acceptance:* one click yields full valid week; gaps visibly marked.
-  *Verification:* manual browser flow; engine tests still green.
-  *Deps:* Tasks 2, 3. *Size:* M.
+  _Acceptance:_ one click yields full valid week; gaps visibly marked.
+  _Verification:_ manual browser flow; engine tests still green.
+  _Deps:_ Tasks 2, 3. _Size:_ M.
 
 - **Task 6: Manual overrides with warnings.** Edit any slot via person picker;
   saving recomputes violations (hard-rule breaches, fairness deltas) and shows
   non-blocking warnings; clear-slot supported.
-  *Acceptance:* can swap people; violation warnings render; nothing blocks.
-  *Verification:* manual browser flow. *Deps:* Task 5. *Size:* M.
+  _Acceptance:_ can swap people; violation warnings render; nothing blocks.
+  _Verification:_ manual browser flow. _Deps:_ Task 5. _Size:_ M.
 
 ### Checkpoint: Core flow
 
@@ -102,15 +102,15 @@ Roster → constraints → generate → tweak works end to end locally.
 - **Task 7: Publish + share link (`/s/[token]`).** Publish/unpublish action on
   week editor; public read-only page listing published weeks (per-person view
   highlight); invalid token → `notFound()`.
-  *Acceptance:* published week visible without cookies/login; unpublished
+  _Acceptance:_ published week visible without cookies/login; unpublished
   invisible; edit UI absent on share page.
-  *Verification:* manual browser flow (incognito). *Deps:* Task 5. *Size:* S.
+  _Verification:_ manual browser flow (incognito). _Deps:_ Task 5. _Size:_ S.
 
 - **Task 8: Site shell & fairness stats.** Home page with feature cards
   (Shifts now, placeholders later); nav in root layout; fairness sidebar on
   week editor (per-person totals: shifts, nights, kitchens — week + all-time).
-  *Acceptance:* navigation coherent; stats match DB aggregates.
-  *Verification:* manual browser check. *Deps:* Tasks 5–7. *Size:* S.
+  _Acceptance:_ navigation coherent; stats match DB aggregates.
+  _Verification:_ manual browser check. _Deps:_ Tasks 5–7. _Size:_ S.
 
 ### Checkpoint: Complete
 
@@ -119,12 +119,12 @@ All spec success criteria met; `pnpm build` + `pnpm test` green; ready for
 
 ## Risks and Mitigations
 
-| Risk | Impact | Mitigation |
-|------|--------|------------|
-| Next 16 API drift from habit (async params, revalidateTag signature) | Med | Conventions pinned in this plan from bundled docs; consult `node_modules/next/dist/docs/` when unsure |
-| Scheduler fairness quality (greedy gets stuck) | Med | Swap-improvement pass + fairness unit tests with thresholds; gaps reported not hidden |
-| SQLite driver availability | Low | Uses the built-in `node:sqlite` (Node ≥ 20.9, required by Next 16 anyway) — no native dependency to build |
-| No auth on admin (accepted for v1) | Low | Documented in spec; share token separate |
+| Risk                                                                 | Impact | Mitigation                                                                                                |
+| -------------------------------------------------------------------- | ------ | --------------------------------------------------------------------------------------------------------- |
+| Next 16 API drift from habit (async params, revalidateTag signature) | Med    | Conventions pinned in this plan from bundled docs; consult `node_modules/next/dist/docs/` when unsure     |
+| Scheduler fairness quality (greedy gets stuck)                       | Med    | Swap-improvement pass + fairness unit tests with thresholds; gaps reported not hidden                     |
+| SQLite driver availability                                           | Low    | Uses the built-in `node:sqlite` (Node ≥ 20.9, required by Next 16 anyway) — no native dependency to build |
+| No auth on admin (accepted for v1)                                   | Low    | Documented in spec; share token separate                                                                  |
 
 ## Open Questions
 

@@ -1,13 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { generateWeek } from "./generate";
 import { SLOT_CAPACITY, SLOT_TYPES } from "../shifts/types";
-import type {
-  Assignment,
-  Constraint,
-  GenerateInput,
-  Person,
-  PersonHistory,
-} from "../shifts/types";
+import type { Assignment, Constraint, GenerateInput, Person, PersonHistory } from "../shifts/types";
 import { addDays, weekDates } from "../shifts/week";
 
 const WEEK = "2026-07-12"; // a Sunday
@@ -69,7 +63,9 @@ function assertHardRules(assignments: Assignment[], constraints: Constraint[]) {
     constraints.filter((c) => c.kind === "unavailable_date").map((c) => `${c.value}:${c.personId}`),
   );
   const shiftOff = new Set(
-    constraints.filter((c) => c.kind === "unavailable_shift").map((c) => `${c.value}:${c.personId}`),
+    constraints
+      .filter((c) => c.kind === "unavailable_shift")
+      .map((c) => `${c.value}:${c.personId}`),
   );
   const anyShiftOff = new Set(
     constraints
@@ -161,9 +157,7 @@ describe("generateWeek", () => {
         backupCount: backupTotals.get(p.id)!,
         totalCount: totals.get(p.id)!,
       }));
-      const { assignments, gaps } = generateWeek(
-        input({ people, history, weekStart, seed: w }),
-      );
+      const { assignments, gaps } = generateWeek(input({ people, history, weekStart, seed: w }));
       expect(gaps).toHaveLength(0);
       for (const a of assignments) {
         totals.set(a.personId, totals.get(a.personId)! + 1);
@@ -195,9 +189,7 @@ describe("generateWeek", () => {
     for (let seed = 0; seed < 10; seed++) {
       const { assignments } = generateWeek(input({ people: roster(8), seed }));
       for (const a of assignments.filter((x) => x.slot === "kitchen")) {
-        const sameDay = assignments.filter(
-          (x) => x.date === a.date && x.personId === a.personId,
-        );
+        const sameDay = assignments.filter((x) => x.date === a.date && x.personId === a.personId);
         expect(sameDay).toHaveLength(1);
       }
     }
@@ -266,9 +258,7 @@ describe("generateWeek", () => {
         ),
       ).toBe(true);
       // …but a night shift the day before the week starts rules them out: gap.
-      const withPrior = generateWeek(
-        input({ people, history, seed, priorNightPersonIds: [1] }),
-      );
+      const withPrior = generateWeek(input({ people, history, seed, priorNightPersonIds: [1] }));
       expect(
         withPrior.assignments.some(
           (a) => a.date === WEEK && a.slot === "morning" && a.personId === 1,
@@ -434,9 +424,7 @@ describe("generateWeek", () => {
   it("blocks a whole-day-off person from every role, including kitchen and backup", () => {
     const people = roster(6);
     const D = addDays(WEEK, 3);
-    const constraints: Constraint[] = [
-      { id: 1, personId: 1, kind: "unavailable_date", value: D },
-    ];
+    const constraints: Constraint[] = [{ id: 1, personId: 1, kind: "unavailable_date", value: D }];
     for (let seed = 0; seed < 10; seed++) {
       const { assignments } = generateWeek(input({ people, constraints, seed }));
       expect(assignments.some((a) => a.date === D && a.personId === 1)).toBe(false);

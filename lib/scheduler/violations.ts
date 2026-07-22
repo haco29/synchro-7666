@@ -45,9 +45,7 @@ export function computeViolations(
   // assignment to that same time-shift, and — because kitchen/backup require
   // full-day availability — with any kitchen/backup assignment that day.
   const wholeDayOff = new Set(
-    constraints
-      .filter((c) => c.kind === "unavailable_date")
-      .map((c) => `${c.value}:${c.personId}`),
+    constraints.filter((c) => c.kind === "unavailable_date").map((c) => `${c.value}:${c.personId}`),
   );
   const shiftOff = new Set(
     constraints
@@ -61,9 +59,7 @@ export function computeViolations(
   );
   // Per-day kitchen block: keyed `date:personId`, consulted only for kitchen.
   const kitchenBlocked = new Set(
-    constraints
-      .filter((c) => c.kind === "blocked_kitchen")
-      .map((c) => `${c.value}:${c.personId}`),
+    constraints.filter((c) => c.kind === "blocked_kitchen").map((c) => `${c.value}:${c.personId}`),
   );
   for (const a of assignments) {
     const fullDaySlot = a.slot === "kitchen" || a.slot === "backup";

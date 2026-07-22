@@ -22,12 +22,12 @@ multi-feature coordination site. The shifts feature lets a single organizer:
 
 Each day has exactly these assignment slots:
 
-| Slot | Time | People needed |
-| ---- | ---- | ------------- |
-| Morning | 07:00–15:00 | 2 |
-| Evening | 15:00–23:00 | 2 |
-| Night | 23:00–07:00 (+1 day) | 2 |
-| Kitchen | daily duty | 1 |
+| Slot    | Time                 | People needed |
+| ------- | -------------------- | ------------- |
+| Morning | 07:00–15:00          | 2             |
+| Evening | 15:00–23:00          | 2             |
+| Night   | 23:00–07:00 (+1 day) | 2             |
+| Kitchen | daily duty           | 1             |
 
 - 7 slots/day, 49 assignments per week.
 - Week runs **Sunday–Saturday** (see Open Questions).

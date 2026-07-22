@@ -70,12 +70,13 @@ Confirmed `@clerk/nextjs` works with this Next version before committing to it. 
 Next 16 renamed the `middleware` convention to **`proxy.ts`** (Node.js runtime; edge unsupported);
 `middleware.ts` still works but is deprecated. So Clerk's handler is wired as
 `export const proxy = clerkMiddleware(...)` in `proxy.ts` (drives Tasks 4/5).
-- *Result:* `@clerk/nextjs@7.5.17` peer deps cover Next `^16.1.0-0` (=16.2.10) + React `~19.2.3`
+
+- _Result:_ `@clerk/nextjs@7.5.17` peer deps cover Next `^16.1.0-0` (=16.2.10) + React `~19.2.3`
   (=19.2.4); installed with zero peer warnings; `tsc --noEmit` clean on a `clerkMiddleware` /
   `createRouteMatcher` / `auth.protect()` `proxy.ts` spike.
-- *Deferred:* the live "gated route → sign-in redirect" needs Clerk API keys (none yet) — verify at
+- _Deferred:_ the live "gated route → sign-in redirect" needs Clerk API keys (none yet) — verify at
   the start of Task 4 with a Clerk dev instance. Fallbacks if it ever regresses: Auth.js / per-team passcode.
-- *Dependencies:* None. *Files:* throwaway spike (removed); `@clerk/nextjs` dependency retained. *Scope:* S.
+- _Dependencies:_ None. _Files:_ throwaway spike (removed); `@clerk/nextjs` dependency retained. _Scope:_ S.
 
 ### Phase 1: Database foundation
 
@@ -84,11 +85,12 @@ Add `drizzle-orm`, `@libsql/client`, and dev deps `drizzle-kit`, `dotenv`, and a
 (`vitest`). Create `drizzle.config.ts` (dialect `turso`, schema + migrations paths), add
 `db:generate|migrate|push|studio|seed` and `test` scripts to `package.json`, create `.env.example`,
 and confirm `.gitignore` covers `.env*` and `data/*.db*`.
-- *Acceptance:* deps install; `pnpm db:generate` runs (even with empty schema); `.env.example` lists
+
+- _Acceptance:_ deps install; `pnpm db:generate` runs (even with empty schema); `.env.example` lists
   all required vars; no secrets or `.env.local` tracked by git.
-- *Verification:* `pnpm install` clean; `pnpm exec drizzle-kit --version` works; `git status` shows
+- _Verification:_ `pnpm install` clean; `pnpm exec drizzle-kit --version` works; `git status` shows
   no `.env.local`/`.db` staged.
-- *Dependencies:* None. *Files:* `package.json`, `drizzle.config.ts`, `.env.example`, `.gitignore`. *Scope:* S.
+- _Dependencies:_ None. _Files:_ `package.json`, `drizzle.config.ts`, `.env.example`, `.gitignore`. _Scope:_ S.
 
 **Task 2 — Drizzle schema, DB client singleton, and initial migration.**
 Write `lib/db/schema.ts` with `teams` (+ `clerk_org_id` unique, `share_token` unique), `people`
@@ -96,24 +98,27 @@ Write `lib/db/schema.ts` with `teams` (+ `clerk_org_id` unique, `share_token` un
 `assignments` (`UNIQUE(week_id, date, slot, person_id)`, index on `week_id`), and `settings`.
 Add `lib/db/index.ts` (single libSQL client + `drizzle()` instance from env). Generate the initial
 migration and apply it to a local libSQL file.
-- *Acceptance:* schema compiles under strict TS; `pnpm db:generate` produces `drizzle/0000_*.sql`
+
+- _Acceptance:_ schema compiles under strict TS; `pnpm db:generate` produces `drizzle/0000_*.sql`
   matching the spec's tables/constraints; `pnpm db:migrate` applies cleanly to a fresh local file;
   re-running `db:generate` reports no drift.
-- *Verification:* migration file exists and is committed; `sqlite3 <localfile> .schema` shows all
+- _Verification:_ migration file exists and is committed; `sqlite3 <localfile> .schema` shows all
   six tables with the specified uniqueness constraints and the `assignments` index.
-- *Dependencies:* Task 1. *Files:* `lib/db/schema.ts`, `lib/db/index.ts`, `drizzle/0000_*.sql`. *Scope:* M.
+- _Dependencies:_ Task 1. _Files:_ `lib/db/schema.ts`, `lib/db/index.ts`, `drizzle/0000_*.sql`. _Scope:_ M.
 
 **Task 3 — Seed script: default team + import from `data/synchro.db`.**
 Write `scripts/seed.ts` (run via `pnpm db:seed`) that creates one default team (placeholder
 `clerk_org_id`, to be linked in Task 8), imports the 11 existing `people` and the `share_token`
 from `data/synchro.db`, and is idempotent (safe to re-run). Add a seed test.
-- *Acceptance:* against an empty DB the seed creates exactly one team + 11 people + the share_token;
+
+- _Acceptance:_ against an empty DB the seed creates exactly one team + 11 people + the share_token;
   a second run adds no duplicates; test passes.
-- *Verification:* `pnpm db:seed` twice, then a count query shows 1 team / 11 people; `pnpm test`
+- _Verification:_ `pnpm db:seed` twice, then a count query shows 1 team / 11 people; `pnpm test`
   covers the idempotency case.
-- *Dependencies:* Task 2. *Files:* `scripts/seed.ts`, `scripts/seed.test.ts`. *Scope:* M.
+- _Dependencies:_ Task 2. _Files:_ `scripts/seed.ts`, `scripts/seed.test.ts`. _Scope:_ M.
 
 ### Checkpoint: Database foundation
+
 Local libSQL DB migrates and seeds; schema matches spec; `pnpm db:*` scripts work; tests green.
 Review with human before wiring auth.
 
@@ -125,26 +130,29 @@ Wrap the app in `<ClerkProvider>` (`app/layout.tsx`), add `clerkMiddleware()` as
 per the Task 0 finding) gating all non-public routes, add sign-in/up pages, and document Clerk env
 vars in `.env.example`. First, run the deferred live-redirect check from Task 0 with a Clerk dev
 instance. Choose self-serve org creation as the default (Open Question #2) unless told otherwise.
-- *Acceptance:* unauthenticated access to app routes redirects to sign-in; a signed-in user with an
+
+- _Acceptance:_ unauthenticated access to app routes redirects to sign-in; a signed-in user with an
   active org can reach the app; Clerk keys read from env only.
-- *Verification:* with no session, a protected route redirects (browser/curl); after sign-in it
+- _Verification:_ with no session, a protected route redirects (browser/curl); after sign-in it
   renders; no Clerk keys in source.
-- *Dependencies:* Task 0. *Files:* `proxy.ts`, `app/layout.tsx`, `app/sign-in/[[...]]/page.tsx`,
-  `app/sign-up/[[...]]/page.tsx`, `.env.example`. *Scope:* M.
+- _Dependencies:_ Task 0. _Files:_ `proxy.ts`, `app/layout.tsx`, `app/sign-in/[[...]]/page.tsx`,
+  `app/sign-up/[[...]]/page.tsx`, `.env.example`. _Scope:_ M.
 
 **Task 5 — `lib/auth.ts`: team resolution and role guards.**
 Implement `currentTeam()` (reads Clerk `auth()` active org id, looks up `teams.clerk_org_id`, returns
 the internal `team_id`; errors if none) plus `requireAdmin()` / `requireMember()` guards mapping to
 Clerk roles (`org:admin` = editor, member = viewer). Auto-provision a `teams` row on first request
 for a new Clerk org (links `clerk_org_id`).
-- *Acceptance:* `currentTeam()` returns the correct internal `team_id` for a signed-in user's active
+
+- _Acceptance:_ `currentTeam()` returns the correct internal `team_id` for a signed-in user's active
   org and throws when unauthenticated / no org; `requireAdmin()` rejects members; a brand-new Clerk
   org gets a `teams` row created once.
-- *Verification:* unit tests with a mocked/stubbed Clerk `auth()` cover: no session → throws;
+- _Verification:_ unit tests with a mocked/stubbed Clerk `auth()` cover: no session → throws;
   member → `requireAdmin` throws; admin → passes; new org → team row created idempotently.
-- *Dependencies:* Task 2, Task 4. *Files:* `lib/auth.ts`, `lib/auth.test.ts`. *Scope:* M.
+- _Dependencies:_ Task 2, Task 4. _Files:_ `lib/auth.ts`, `lib/auth.test.ts`. _Scope:_ M.
 
 ### Checkpoint: Auth foundation
+
 Sign-in gating works end-to-end; `currentTeam()` maps Clerk org → internal team; role guards
 enforce editor vs viewer. Review with human before the vertical slice.
 
@@ -158,12 +166,13 @@ param and are `async` (`listPeople`, `addPerson`, `renamePerson`, `setPersonActi
 `historyBefore`, `getShareToken`, plus any helper). Replace `lib/db/client.ts` (`node:sqlite`)
 with the libSQL/Drizzle instance. Port `lib/db/queries.test.ts` to the new async, two-team API
 and add **cross-team isolation** cases. Keep `swapSeat`'s stale-guard and atomic-replace semantics.
-- *Acceptance:* every query filters by `teamId` and is async; existing behaviors (atomic week
+
+- _Acceptance:_ every query filters by `teamId` and is async; existing behaviors (atomic week
   replace, swap stale-guard, history aggregation, share token) preserved; `UNIQUE(team_id, name)`
-  + cascade behave; a two-team fixture proves isolation; no query trusts a client-supplied `teamId`.
-- *Verification:* `pnpm test` — rewritten `queries.test.ts` green AND `lib/scheduler/*` +
+  - cascade behave; a two-team fixture proves isolation; no query trusts a client-supplied `teamId`.
+- _Verification:_ `pnpm test` — rewritten `queries.test.ts` green AND `lib/scheduler/*` +
   `lib/shifts/*` tests still green (regression guard).
-- *Dependencies:* Task 2. *Files:* `lib/db/queries.ts`, `lib/db/client.ts`, `lib/db/queries.test.ts`. *Scope:* L (split if needed).
+- _Dependencies:_ Task 2. _Files:_ `lib/db/queries.ts`, `lib/db/client.ts`, `lib/db/queries.test.ts`. _Scope:_ L (split if needed).
 
 **Task 7 — Wire existing routes to auth + team scope (vertical proof).**
 Update the 5 DB consumers to `await` the now-async, team-scoped queries and resolve `teamId` via
@@ -171,15 +180,17 @@ Update the 5 DB consumers to `await` the now-async, team-scoped queries and reso
 `app/shifts/week/[start]/page.tsx`, `app/shifts/people/page.tsx`,
 `app/shifts/_components/fairness-panel.tsx`, and `app/s/[token]/page.tsx` (public token route —
 resolve team by `share_token`, no Clerk; see Open Question #1). This proves the end-to-end slice
-against the *real* app, not a throwaway page.
-- *Acceptance:* signed-in user sees only their team's data; admin edits/publishes; a member (viewer)
+against the _real_ app, not a throwaway page.
+
+- _Acceptance:_ signed-in user sees only their team's data; admin edits/publishes; a member (viewer)
   is blocked from mutations; unauthenticated redirected; `/s/[token]` still renders the published
   week for the matching team. Real reads + writes hit Turso (Success Criteria #5).
-- *Verification:* manual browser flow through `/shifts` (sign in → view week → edit as admin →
+- _Verification:_ manual browser flow through `/shifts` (sign in → view week → edit as admin →
   persists; viewer blocked); `/s/[token]` loads; Server Actions re-check auth (not just proxy).
-- *Dependencies:* Task 5, Task 6. *Files:* the 5 consumer files above + `app/shifts/actions.ts`. *Scope:* L (split if needed).
+- _Dependencies:_ Task 5, Task 6. _Files:_ the 5 consumer files above + `app/shifts/actions.ts`. _Scope:_ L (split if needed).
 
 ### Checkpoint: Vertical slice
+
 End-to-end locally via `/shifts`: sign in → view a week → admin edits/publishes → persists; viewer
 blocked from mutations; `/s/[token]` renders; cross-team isolation holds; `lib/scheduler/*` +
 `lib/shifts/*` tests still green. Review with human before touching cloud infra.
@@ -191,33 +202,36 @@ blocked from mutations; `/s/[token]` renders; cross-team isolation holds; `lib/s
 DB (Vercel Marketplace or Turso CLI), apply migrations to it, set `TURSO_*` and `CLERK_*` env vars
 in the Vercel project (prod + preview), seed the default team and link its `clerk_org_id` to a real
 Clerk organization, deploy, and verify a real read/write against hosted Turso through the deployed app.
-- *Acceptance:* deployed app on Vercel authenticates via Clerk and performs the Task 7 read+write
+
+- _Acceptance:_ deployed app on Vercel authenticates via Clerk and performs the Task 7 read+write
   against hosted Turso; env vars set in prod + preview; default team linked to a real Clerk org
   (Success Criteria #1, #3, #4, #11).
-- *Verification:* on the deployed URL, sign in → open `/shifts` → admin edits a week → persists
+- _Verification:_ on the deployed URL, sign in → open `/shifts` → admin edits a week → persists
   (confirm the row in Turso via `turso db shell`); no credentials in the client bundle or git.
-- *Dependencies:* Tasks 3, 5, 7. *Files:* `.env.example` (docs only), Vercel/Turso/Clerk dashboards
-  (external). *Scope:* M.
+- _Dependencies:_ Tasks 3, 5, 7. _Files:_ `.env.example` (docs only), Vercel/Turso/Clerk dashboards
+  (external). _Scope:_ M.
 
 ### Checkpoint: Complete
+
 All Success Criteria (spec §7) met; deployed app reads/writes hosted Turso under Clerk auth with
 tenancy + role enforcement. Ready for `/test` and `/review`.
 
 ## Risks and Mitigations
 
-| Risk | Impact | Mitigation |
-|------|--------|------------|
-| `@clerk/nextjs` incompatible with Next 16.2.10 | High | Phase 0 spike fails fast; fallbacks are Auth.js or per-team passcode (weighed in spec). |
-| Task 8 blocked on missing cloud accounts/credentials | Med | All of Phases 0–3 run locally with no cloud; Task 8 isolates every human-in-loop step. |
-| Multi-tenancy bug leaks cross-team data | High | `teamId` derived only in `currentTeam()`; explicit cross-team isolation tests (Task 6). |
-| Server Action bypasses the proxy (direct POST) | Med | Every action re-checks `requireAdmin()`/`currentTeam()` (Task 7); not relying on the proxy alone. |
-| Drizzle libSQL→Postgres migration later | Low | Drizzle keeps dialect swappable; not exercised now. |
-| Rewriting working, tested code (queries.ts + routes) introduces regressions | High | Port `queries.test.ts` behavior-for-behavior; keep `lib/scheduler/*` + `lib/shifts/*` tests green as a guard; Tasks 6/7 are L — split into smaller increments if needed. |
-| Sync→async query conversion breaks callers silently | Med | TypeScript surfaces missing `await` at compile; `tsc --noEmit` gate after Tasks 6/7. |
+| Risk                                                                        | Impact | Mitigation                                                                                                                                                               |
+| --------------------------------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `@clerk/nextjs` incompatible with Next 16.2.10                              | High   | Phase 0 spike fails fast; fallbacks are Auth.js or per-team passcode (weighed in spec).                                                                                  |
+| Task 8 blocked on missing cloud accounts/credentials                        | Med    | All of Phases 0–3 run locally with no cloud; Task 8 isolates every human-in-loop step.                                                                                   |
+| Multi-tenancy bug leaks cross-team data                                     | High   | `teamId` derived only in `currentTeam()`; explicit cross-team isolation tests (Task 6).                                                                                  |
+| Server Action bypasses the proxy (direct POST)                              | Med    | Every action re-checks `requireAdmin()`/`currentTeam()` (Task 7); not relying on the proxy alone.                                                                        |
+| Drizzle libSQL→Postgres migration later                                     | Low    | Drizzle keeps dialect swappable; not exercised now.                                                                                                                      |
+| Rewriting working, tested code (queries.ts + routes) introduces regressions | High   | Port `queries.test.ts` behavior-for-behavior; keep `lib/scheduler/*` + `lib/shifts/*` tests green as a guard; Tasks 6/7 are L — split into smaller increments if needed. |
+| Sync→async query conversion breaks callers silently                         | Med    | TypeScript surfaces missing `await` at compile; `tsc --noEmit` gate after Tasks 6/7.                                                                                     |
 
 ## Open Questions
 
 Carried from spec §8 — none block Phases 0–3; items 1–2 affect Phase 4 polish:
+
 1. **`share_token` keep or drop?** Kept in schema (Task 2); no runtime use built. Decide before any public-link feature.
 2. **Clerk org creation** — plan assumes **self-serve** (Task 4/5). Confirm or switch to admin-provisioned.
 3. **Role mapping** — plan assumes `org:admin` (editor) + member (viewer). Confirm no third role.
@@ -226,6 +240,7 @@ Carried from spec §8 — none block Phases 0–3; items 1–2 affect Phase 4 po
 6. **Slot vocabulary** — free-text `slot` for now; `slots` table deferred to schema v2 (out of scope).
 
 ## SDLC Command Coverage
+
 - [x] /spec completed
 - [x] /plan completed
 - [x] /build completed (Tasks 0–8; deployed to production)

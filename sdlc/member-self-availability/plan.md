@@ -29,13 +29,13 @@ The work splits into two independently valuable vertical slices with a checkpoin
   `currentTeam()` → the linked `people.id`. The member action rejects any `personId` that isn't the
   resolved one — mirroring the existing "never trust `team_id` from client" invariant.
 - **Authorization changes, the mutation does not.** The member toggle reuses the existing
-  `setUnavailable()` query after the own-person check. The difference from the admin path is *who is
-  allowed*, not *what is written*.
+  `setUnavailable()` query after the own-person check. The difference from the admin path is _who is
+  allowed_, not _what is written_.
 - **The query layer stays Clerk-free and unit-testable.** Query functions take `teamId`/`personId`
   as parameters (as today); only `lib/auth.ts` touches Clerk. The Clerk **member-list** read is
   isolated in a new server-only `lib/clerk/members.ts` so the admin UI has one seam to mock/test.
-- **De-risk the new Clerk Backend dependency first.** The app has only ever read the *current
-  caller's* session. `clerkClient().organizations.getOrganizationMembershipList` is new surface —
+- **De-risk the new Clerk Backend dependency first.** The app has only ever read the _current
+  caller's_ session. `clerkClient().organizations.getOrganizationMembershipList` is new surface —
   Phase 0 verifies its availability and shape before anything is built on it (fail-fast, mirroring
   db-init's Clerk×Next spike).
 
@@ -89,6 +89,7 @@ deploy (Phase 4) folded into whichever lands last. Recommend one PR unless revie
 - **Relink/duplicate** (spec Q4) — leaning last-write-wins; confirmed in Task 4 acceptance criteria.
 
 ## SDLC Command Coverage
+
 - [x] /spec completed
 - [x] /plan completed
 - [x] /build completed (Tasks 0–8 + Task 9 docs; **hosted Turso migrated ✅**; code deploy happens on PR merge to main — Vercel git integration)
@@ -100,4 +101,5 @@ deploy (Phase 4) folded into whichever lands last. Recommend one PR unless revie
 - [x] CodeRabbit review addressed: **①** inactive-member enforced server-side (`isPersonActive` guard + test); **②** `linkPersonAction` validates `clerkUserId` is an org member (+ test); **⑤** actions.test teardown (close client + rm temp dir); **⑥** these records reconciled. **③/④** (composite `(team_id, clerk_user_id)` unique) = spec **Q1**, deliberately deferred (documented in ADR-0003). Suite **88 green**.
 
 ## Current state
+
 Feature complete; all gates green (88 tests, tsc/build clean). Hosted DB migrated. Remaining: merge PR #3 (→ auto-deploy) + two human click-throughs (admin links a member → member self-toggles).
