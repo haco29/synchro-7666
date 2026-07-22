@@ -15,6 +15,7 @@ import {
   removeAssignment,
   renamePerson,
   replaceWeekAssignments,
+  setKitchenBlocked,
   setPersonActive,
   setPersonRotation,
   setUnavailable,
@@ -104,7 +105,11 @@ export async function renamePersonAction(formData: FormData) {
 
 export async function setPersonActiveAction(formData: FormData) {
   const { teamId } = await requireAdmin();
-  await setPersonActive(teamId, requireId(formData.get("personId")), formData.get("active") === "1");
+  await setPersonActive(
+    teamId,
+    requireId(formData.get("personId")),
+    formData.get("active") === "1",
+  );
   revalidatePath("/shifts", "layout");
 }
 
@@ -216,6 +221,21 @@ export async function toggleMyShiftUnavailabilityAction(formData: FormData) {
   revalidatePath("/shifts", "layout");
 }
 
+/**
+ * Admin-only: block or clear a person's kitchen duty for a single day. There is
+ * no member self-service variant — a kitchen exemption is a manager's call.
+ */
+export async function toggleKitchenBlockAction(formData: FormData) {
+  const { teamId } = await requireAdmin();
+  await setKitchenBlocked(
+    teamId,
+    requireId(formData.get("personId")),
+    requireDate(formData.get("date")),
+    formData.get("blocked") === "1",
+  );
+  revalidatePath("/shifts", "layout");
+}
+
 export async function blockWeekAction(formData: FormData) {
   const { teamId } = await requireAdmin();
   await setWeekUnavailable(
@@ -264,10 +284,7 @@ export async function generateWeekAction(formData: FormData) {
 
 export async function assignSlotAction(formData: FormData) {
   const { teamId } = await requireAdmin();
-  const { weekStart, date } = requireWeekDate(
-    formData.get("weekStart"),
-    formData.get("date"),
-  );
+  const { weekStart, date } = requireWeekDate(formData.get("weekStart"), formData.get("date"));
   const slot = requireSlot(formData.get("slot"));
   const personId = requireId(formData.get("personId"));
   const previousId = Number(formData.get("previousPersonId"));

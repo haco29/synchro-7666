@@ -18,11 +18,7 @@ import { addDays, dayLabel, isIsoDate, weekDates, weekStartOf } from "@/lib/shif
 
 export const metadata = { title: "Week · Shifts" };
 
-export default async function WeekPage({
-  params,
-}: {
-  params: Promise<{ start: string }>;
-}) {
+export default async function WeekPage({ params }: { params: Promise<{ start: string }> }) {
   const { start } = await params;
   if (!isIsoDate(start)) notFound();
   const weekStart = weekStartOf(start);
@@ -41,18 +37,16 @@ export default async function WeekPage({
 
   const seatFor = (date: string, slot: SlotType): (Assignment | null)[] => {
     const filled = assignments.filter((a) => a.date === date && a.slot === slot);
-    return Array.from({ length: Math.max(SLOT_CAPACITY[slot], filled.length) }, (_, i) =>
-      filled[i] ?? null,
+    return Array.from(
+      { length: Math.max(SLOT_CAPACITY[slot], filled.length) },
+      (_, i) => filled[i] ?? null,
     );
   };
 
   const unfilled = dates.reduce(
     (n, date) =>
       n +
-      SLOT_TYPES.reduce(
-        (m, slot) => m + seatFor(date, slot).filter((s) => s === null).length,
-        0,
-      ),
+      SLOT_TYPES.reduce((m, slot) => m + seatFor(date, slot).filter((s) => s === null).length, 0),
     0,
   );
 
@@ -61,10 +55,7 @@ export default async function WeekPage({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <WeekNav weekStart={weekStart} hrefFor={(w) => `/shifts/week/${w}`} />
         <div className="flex items-center gap-2">
-          <GenerateScheduleButton
-            weekStart={weekStart}
-            isRegenerate={assignments.length > 0}
-          />
+          <GenerateScheduleButton weekStart={weekStart} isRegenerate={assignments.length > 0} />
         </div>
       </div>
 
@@ -91,8 +82,8 @@ export default async function WeekPage({
 
       {unfilled > 0 && assignments.length > 0 && (
         <p className="text-sm text-red-600 dark:text-red-400">
-          {unfilled} seat{unfilled === 1 ? "" : "s"} could not be filled — adjust
-          availability or assign manually below.
+          {unfilled} seat{unfilled === 1 ? "" : "s"} could not be filled — adjust availability or
+          assign manually below.
         </p>
       )}
 
@@ -110,7 +101,10 @@ export default async function WeekPage({
           </thead>
           <tbody>
             {dates.map((date) => (
-              <tr key={date} className="border-b border-neutral-100 align-top dark:border-neutral-900">
+              <tr
+                key={date}
+                className="border-b border-neutral-100 align-top dark:border-neutral-900"
+              >
                 <td className="py-2 pr-3 font-medium whitespace-nowrap">{dayLabel(date)}</td>
                 {SLOT_TYPES.map((slot) => (
                   <td key={slot} className="px-2 py-2">
@@ -125,8 +119,7 @@ export default async function WeekPage({
                           people={people}
                           allPeople={allPeople}
                           hasViolation={
-                            seat !== null &&
-                            violationKeys.has(`${date}:${slot}:${seat.personId}`)
+                            seat !== null && violationKeys.has(`${date}:${slot}:${seat.personId}`)
                           }
                         />
                       ))}
@@ -139,9 +132,7 @@ export default async function WeekPage({
         </table>
       </div>
 
-      {people.length > 0 && (
-        <FairnessPanel teamId={teamId} weekStart={weekStart} people={people} />
-      )}
+      {people.length > 0 && <FairnessPanel teamId={teamId} weekStart={weekStart} people={people} />}
     </div>
   );
 }

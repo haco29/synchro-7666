@@ -1,13 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { generateWeek } from "./generate";
 import { SLOT_CAPACITY, SLOT_TYPES } from "../shifts/types";
-import type {
-  Assignment,
-  Constraint,
-  GenerateInput,
-  Person,
-  PersonHistory,
-} from "../shifts/types";
+import type { Assignment, Constraint, GenerateInput, Person, PersonHistory } from "../shifts/types";
 import { addDays, weekDates } from "../shifts/week";
 
 const WEEK = "2026-07-12"; // a Sunday
@@ -45,12 +39,33 @@ function assertHardRules(assignments: Assignment[], constraints: Constraint[]) {
         `kitchen on ${a.date} right after a night shift`,
       ).toBe(false);
     }
+    // night ends 07:00, morning starts 07:00 — no morning right after a night
+    if (a.slot === "morning") {
+      expect(
+        nightOn.has(`${addDays(a.date, -1)}:${a.personId}`),
+        `morning on ${a.date} right after a night shift`,
+      ).toBe(false);
+    }
+  }
+  // a person blocked from kitchen on a date never gets kitchen that day
+  const kitchenBlocked = new Set(
+    constraints.filter((c) => c.kind === "blocked_kitchen").map((c) => `${c.value}:${c.personId}`),
+  );
+  for (const a of assignments) {
+    if (a.slot === "kitchen") {
+      expect(
+        kitchenBlocked.has(`${a.date}:${a.personId}`),
+        `kitchen on ${a.date} for a kitchen-blocked person`,
+      ).toBe(false);
+    }
   }
   const wholeDayOff = new Set(
     constraints.filter((c) => c.kind === "unavailable_date").map((c) => `${c.value}:${c.personId}`),
   );
   const shiftOff = new Set(
-    constraints.filter((c) => c.kind === "unavailable_shift").map((c) => `${c.value}:${c.personId}`),
+    constraints
+      .filter((c) => c.kind === "unavailable_shift")
+      .map((c) => `${c.value}:${c.personId}`),
   );
   const anyShiftOff = new Set(
     constraints
@@ -142,9 +157,7 @@ describe("generateWeek", () => {
         backupCount: backupTotals.get(p.id)!,
         totalCount: totals.get(p.id)!,
       }));
-      const { assignments, gaps } = generateWeek(
-        input({ people, history, weekStart, seed: w }),
-      );
+      const { assignments, gaps } = generateWeek(input({ people, history, weekStart, seed: w }));
       expect(gaps).toHaveLength(0);
       for (const a of assignments) {
         totals.set(a.personId, totals.get(a.personId)! + 1);
@@ -176,9 +189,7 @@ describe("generateWeek", () => {
     for (let seed = 0; seed < 10; seed++) {
       const { assignments } = generateWeek(input({ people: roster(8), seed }));
       for (const a of assignments.filter((x) => x.slot === "kitchen")) {
-        const sameDay = assignments.filter(
-          (x) => x.date === a.date && x.personId === a.personId,
-        );
+        const sameDay = assignments.filter((x) => x.date === a.date && x.personId === a.personId);
         expect(sameDay).toHaveLength(1);
       }
     }
@@ -221,6 +232,92 @@ describe("generateWeek", () => {
         ),
       ).toBe(false);
       expect(withPrior.gaps.some((g) => g.date === WEEK && g.slot === "kitchen")).toBe(true);
+    }
+  });
+
+  it("never assigns morning to the previous day's night person", () => {
+    for (let seed = 0; seed < 20; seed++) {
+      const { assignments } = generateWeek(input({ people: roster(6), seed }));
+      assertHardRules(assignments, []);
+    }
+  });
+
+  it("keeps the prior week's last night person off morning on the first day", () => {
+    // Person 1's heavy night+kitchen history steers day-0 night and kitchen to
+    // the other two, who are then busy — so day-0 morning can only be person 1.
+    const people = roster(3);
+    const history: PersonHistory[] = [
+      { personId: 1, nightCount: 100, kitchenCount: 100, backupCount: 0, totalCount: 0 },
+    ];
+    for (let seed = 0; seed < 10; seed++) {
+      // Without the boundary input person 1 takes the day-0 morning seat…
+      const without = generateWeek(input({ people, history, seed }));
+      expect(
+        without.assignments.some(
+          (a) => a.date === WEEK && a.slot === "morning" && a.personId === 1,
+        ),
+      ).toBe(true);
+      // …but a night shift the day before the week starts rules them out: gap.
+      const withPrior = generateWeek(input({ people, history, seed, priorNightPersonIds: [1] }));
+      expect(
+        withPrior.assignments.some(
+          (a) => a.date === WEEK && a.slot === "morning" && a.personId === 1,
+        ),
+      ).toBe(false);
+      expect(withPrior.gaps.some((g) => g.date === WEEK && g.slot === "morning")).toBe(true);
+    }
+  });
+
+  it("never assigns kitchen to a person blocked from kitchen that day", () => {
+    const people = roster(6);
+    const D = addDays(WEEK, 2);
+    const constraints: Constraint[] = [
+      { id: 1, personId: 1, kind: "blocked_kitchen", value: D },
+      { id: 2, personId: 3, kind: "blocked_kitchen", value: D },
+    ];
+    for (let seed = 0; seed < 20; seed++) {
+      const { assignments } = generateWeek(input({ people, constraints, seed }));
+      assertHardRules(assignments, constraints);
+    }
+  });
+
+  it("gaps the kitchen seat when the only eligible person is blocked from kitchen", () => {
+    // Persons 2 and 3 have a per-shift block on day 0, which also rules them out
+    // of kitchen (kitchen needs a full day free) — so only person 1 can cover
+    // day-0 kitchen. Blocking person 1 from kitchen then leaves it unfilled,
+    // while person 1 still picks up a normal shift.
+    const people = roster(3);
+    const constraints: Constraint[] = [
+      { id: 1, personId: 2, kind: "unavailable_shift", value: `${WEEK}:morning` },
+      { id: 2, personId: 3, kind: "unavailable_shift", value: `${WEEK}:evening` },
+    ];
+    // Person 1's heavy night history steers day-0 night to the others, leaving
+    // person 1 free for the day-0 kitchen seat (the only one they can cover).
+    const history: PersonHistory[] = [
+      { personId: 1, nightCount: 100, kitchenCount: 0, backupCount: 0, totalCount: 0 },
+    ];
+    for (let seed = 0; seed < 10; seed++) {
+      // Without the kitchen block, person 1 takes the day-0 kitchen seat…
+      const without = generateWeek(input({ people, constraints, history, seed }));
+      expect(
+        without.assignments.some(
+          (a) => a.date === WEEK && a.slot === "kitchen" && a.personId === 1,
+        ),
+      ).toBe(true);
+      // …but a kitchen block on person 1 rules them out: the seat gaps.
+      const blocked: Constraint[] = [
+        ...constraints,
+        { id: 3, personId: 1, kind: "blocked_kitchen", value: WEEK },
+      ];
+      const withBlock = generateWeek(input({ people, constraints: blocked, history, seed }));
+      expect(
+        withBlock.assignments.some(
+          (a) => a.date === WEEK && a.slot === "kitchen" && a.personId === 1,
+        ),
+      ).toBe(false);
+      expect(withBlock.gaps.some((g) => g.date === WEEK && g.slot === "kitchen")).toBe(true);
+      // Person 1 is still used that day — just not on kitchen.
+      expect(withBlock.assignments.some((a) => a.date === WEEK && a.personId === 1)).toBe(true);
     }
   });
 
@@ -327,9 +424,7 @@ describe("generateWeek", () => {
   it("blocks a whole-day-off person from every role, including kitchen and backup", () => {
     const people = roster(6);
     const D = addDays(WEEK, 3);
-    const constraints: Constraint[] = [
-      { id: 1, personId: 1, kind: "unavailable_date", value: D },
-    ];
+    const constraints: Constraint[] = [{ id: 1, personId: 1, kind: "unavailable_date", value: D }];
     for (let seed = 0; seed < 10; seed++) {
       const { assignments } = generateWeek(input({ people, constraints, seed }));
       expect(assignments.some((a) => a.date === D && a.personId === 1)).toBe(false);

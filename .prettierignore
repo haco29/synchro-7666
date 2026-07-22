@@ -1,0 +1,14 @@
+# Build output & deps
+.next/
+out/
+build/
+node_modules/
+
+# Generated / lockfiles
+pnpm-lock.yaml
+next-env.d.ts
+drizzle/
+coverage/
+
+# Vendored agent skills (not our code)
+.agents/

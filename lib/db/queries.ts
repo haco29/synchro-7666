@@ -105,11 +105,7 @@ export async function renamePerson(teamId: number, id: number, name: string): Pr
   }
 }
 
-export async function setPersonActive(
-  teamId: number,
-  id: number,
-  active: boolean,
-): Promise<void> {
+export async function setPersonActive(teamId: number, id: number, active: boolean): Promise<void> {
   await getDb()
     .update(people)
     .set({ active })
@@ -249,7 +245,7 @@ export async function listConstraintsForWeek(
     .where(
       and(
         eq(people.teamId, teamId),
-        inArray(constraints.kind, ["unavailable_date", "unavailable_shift"]),
+        inArray(constraints.kind, ["unavailable_date", "unavailable_shift", "blocked_kitchen"]),
         gte(constraints.value, weekStart),
         lt(constraints.value, nextWeekStart),
       ),
@@ -332,6 +328,39 @@ export async function setUnavailableShift(
           eq(constraints.personId, personId),
           eq(constraints.kind, "unavailable_shift"),
           eq(constraints.value, value),
+        ),
+      );
+  }
+}
+
+/**
+ * Toggle a per-day kitchen block for one person on one date. Unlike the
+ * unavailability kinds, this blocks ONLY kitchen duty that day — the person
+ * stays eligible for their normal time-shifts and backup. Value is the ISO
+ * date, so it loads through the same week-range filter as `unavailable_date`.
+ */
+export async function setKitchenBlocked(
+  teamId: number,
+  personId: number,
+  date: string,
+  blocked: boolean,
+): Promise<void> {
+  const db = getDb();
+  if (!(await personOnTeam(db, teamId, personId))) return;
+
+  if (blocked) {
+    await db
+      .insert(constraints)
+      .values({ personId, kind: "blocked_kitchen", value: date })
+      .onConflictDoNothing();
+  } else {
+    await db
+      .delete(constraints)
+      .where(
+        and(
+          eq(constraints.personId, personId),
+          eq(constraints.kind, "blocked_kitchen"),
+          eq(constraints.value, date),
         ),
       );
   }
@@ -538,10 +567,7 @@ export async function removeAssignment(
 // ---- history (cross-week fairness) ----
 
 /** Cumulative counts per person from all of the team's weeks before `weekStart`. */
-export async function historyBefore(
-  teamId: number,
-  weekStart: string,
-): Promise<PersonHistory[]> {
+export async function historyBefore(teamId: number, weekStart: string): Promise<PersonHistory[]> {
   const rows = await getDb()
     .select({
       personId: assignments.personId,

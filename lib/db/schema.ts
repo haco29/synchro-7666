@@ -72,12 +72,7 @@ export const assignments = sqliteTable(
       .references(() => people.id),
   },
   (t) => [
-    uniqueIndex("assignments_week_date_slot_person_unq").on(
-      t.weekId,
-      t.date,
-      t.slot,
-      t.personId,
-    ),
+    uniqueIndex("assignments_week_date_slot_person_unq").on(t.weekId, t.date, t.slot, t.personId),
     index("idx_assignments_week").on(t.weekId),
   ],
 );

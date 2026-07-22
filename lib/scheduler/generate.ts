@@ -1,10 +1,4 @@
-import type {
-  Assignment,
-  Gap,
-  GenerateInput,
-  GenerateResult,
-  SlotType,
-} from "../shifts/types";
+import type { Assignment, Gap, GenerateInput, GenerateResult, SlotType } from "../shifts/types";
 import { SLOT_CAPACITY } from "../shifts/types";
 import { addDays, weekDates } from "../shifts/week";
 
@@ -22,7 +16,6 @@ const W_WEEK_TOTAL = 1;
 const W_NIGHT_BALANCE = 3;
 const W_KITCHEN_BALANCE = 2;
 const W_BACKUP_BALANCE = 3;
-const W_MORNING_AFTER_NIGHT = 0.75;
 const W_TIEBREAK = 0.01;
 
 /** Deterministic PRNG (mulberry32) so a given seed always yields one schedule. */
@@ -40,8 +33,8 @@ function makeRng(seed: number): () => number {
  * Greedy fair scheduler. For every slot position, assigns the eligible person
  * with the lowest fairness score. Hard rules are structural: one slot per
  * person per day, unavailable people are never eligible, and the previous
- * night's person never gets kitchen the next day (they need to sleep).
- * Unfillable positions are returned as gaps, never silently dropped.
+ * night's person never gets kitchen OR a morning shift the next day (they need
+ * to sleep). Unfillable positions are returned as gaps, never silently dropped.
  */
 export function generateWeek(input: GenerateInput): GenerateResult {
   const rng = makeRng(input.seed ?? 1);
@@ -67,6 +60,13 @@ export function generateWeek(input: GenerateInput): GenerateResult {
       .filter((c) => c.kind === "unavailable_shift")
       .map((c) => `${c.value.split(":")[0]}:${c.personId}`),
   );
+  // Per-day kitchen block: value is the date, so key `date:personId`. Only the
+  // kitchen slot consults this — every other slot stays open to the person.
+  const kitchenBlocked = new Set(
+    input.constraints
+      .filter((c) => c.kind === "blocked_kitchen")
+      .map((c) => `${c.value}:${c.personId}`),
+  );
 
   const nightHist = new Map<number, number>();
   const kitchenHist = new Map<number, number>();
@@ -81,7 +81,7 @@ export function generateWeek(input: GenerateInput): GenerateResult {
   const busyOn = new Map<string, Set<number>>(); // date -> personIds assigned
   const nightOn = new Map<string, Set<number>>(); // date -> personIds on night
   // Seed with the prior week's last night so the after-night rules (no kitchen,
-  // morning penalty) hold across the week boundary, not just within the week.
+  // no morning) hold across the week boundary, not just within the week.
   if (input.priorNightPersonIds?.length) {
     nightOn.set(addDays(input.weekStart, -1), new Set(input.priorNightPersonIds));
   }
@@ -93,12 +93,14 @@ export function generateWeek(input: GenerateInput): GenerateResult {
     for (const slot of FILL_ORDER) {
       // Kitchen and backup demand a full day free: any per-shift block that
       // day disqualifies them. Time-shifts are blocked only by a matching
-      // per-shift block for that specific shift. Kitchen additionally excludes
-      // whoever worked the previous night — it ends 07:00 that morning, so a
-      // full day of kitchen duty would leave them no time to sleep. (FILL_ORDER
-      // puts night before kitchen, so the previous day's night is always known.)
+      // per-shift block for that specific shift. Both kitchen and morning
+      // additionally exclude whoever worked the previous night — night ends
+      // 07:00, so kitchen duty would leave no time to sleep and a morning
+      // (starting 07:00) would be a ~16-hour back-to-back stretch. (FILL_ORDER
+      // puts night before both, so the previous day's night is always known.)
       const isTimeShift = slot !== "kitchen" && slot !== "backup";
-      const sleptOff = slot === "kitchen" ? nightOn.get(addDays(date, -1)) : undefined;
+      const sleptOff =
+        slot === "kitchen" || slot === "morning" ? nightOn.get(addDays(date, -1)) : undefined;
       for (let seat = 0; seat < SLOT_CAPACITY[slot]; seat++) {
         const candidates = input.people.filter(
           (p) =>
@@ -107,6 +109,7 @@ export function generateWeek(input: GenerateInput): GenerateResult {
             (isTimeShift
               ? !shiftOff.has(`${date}:${slot}:${p.id}`)
               : !anyShiftOff.has(`${date}:${p.id}`)) &&
+            !(slot === "kitchen" && kitchenBlocked.has(`${date}:${p.id}`)) &&
             !sleptOff?.has(p.id) &&
             !busyOn.get(date)?.has(p.id),
         );
@@ -130,9 +133,6 @@ export function generateWeek(input: GenerateInput): GenerateResult {
           }
           if (slot === "kitchen") {
             score += (kitchenHist.get(p.id) ?? 0) * W_KITCHEN_BALANCE;
-          }
-          if (slot === "morning" && nightOn.get(addDays(date, -1))?.has(p.id)) {
-            score += W_MORNING_AFTER_NIGHT;
           }
           score += rng() * W_TIEBREAK;
           if (score < bestScore) {

@@ -1,0 +1,5 @@
+# Revisions listed here are skipped by `git blame` (see blame.ignoreRevsFile).
+# Add only pure-formatting / mechanical commits — never ones with logic changes.
+
+# style: format codebase with Prettier
+e3a69e9763adb1556d53c8e4ab3c40c0023cc87f

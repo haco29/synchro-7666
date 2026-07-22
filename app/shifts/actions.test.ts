@@ -27,6 +27,7 @@ import {
   clearSlotAction,
   generateWeekAction,
   linkPersonAction,
+  toggleKitchenBlockAction,
   toggleMyShiftUnavailabilityAction,
   toggleMyUnavailabilityAction,
   toggleShiftUnavailableAction,
@@ -71,10 +72,7 @@ beforeEach(async () => {
     .values({ name: "Team A", clerkOrgId: "org_A" })
     .returning();
   teamId = team.id;
-  const [person] = await db
-    .insert(schema.people)
-    .values({ teamId, name: "Dana" })
-    .returning();
+  const [person] = await db.insert(schema.people).values({ teamId, name: "Dana" }).returning();
   personId = person.id;
 });
 
@@ -185,10 +183,7 @@ describe("toggleMyUnavailabilityAction", () => {
 
   it("rejects editing another person's availability (spoofed personId)", async () => {
     await linkDana();
-    const [roni] = await db
-      .insert(schema.people)
-      .values({ teamId, name: "Roni" })
-      .returning();
+    const [roni] = await db.insert(schema.people).values({ teamId, name: "Roni" }).returning();
     stubAuth({ userId: "user_1", orgId: "org_A", orgRole: "org:member" });
 
     // The form claims Roni, but the caller is linked to Dana → must be rejected.
@@ -275,7 +270,12 @@ describe("toggleShiftUnavailableAction (admin)", () => {
     stubAuth({ userId: "member_1", orgId: "org_A", orgRole: "org:member" });
     await expect(
       toggleShiftUnavailableAction(
-        form({ personId: String(personId), date: "2026-07-14", shift: "morning", unavailable: "1" }),
+        form({
+          personId: String(personId),
+          date: "2026-07-14",
+          shift: "morning",
+          unavailable: "1",
+        }),
       ),
     ).rejects.toThrow();
     expect(await q.listConstraintsForWeek(teamId, "2026-07-12")).toHaveLength(0);
@@ -285,7 +285,12 @@ describe("toggleShiftUnavailableAction (admin)", () => {
     stubAuth({ userId: "admin_1", orgId: "org_A", orgRole: "org:admin" });
     await expect(
       toggleShiftUnavailableAction(
-        form({ personId: String(personId), date: "2026-07-14", shift: "kitchen", unavailable: "1" }),
+        form({
+          personId: String(personId),
+          date: "2026-07-14",
+          shift: "kitchen",
+          unavailable: "1",
+        }),
       ),
     ).rejects.toThrow();
     expect(await q.listConstraintsForWeek(teamId, "2026-07-12")).toHaveLength(0);
@@ -308,15 +313,16 @@ describe("toggleMyShiftUnavailabilityAction (member self)", () => {
     );
     const cons = await q.listConstraintsForWeek(teamId, "2026-07-12");
     expect(cons).toHaveLength(1);
-    expect(cons[0]).toMatchObject({ personId, kind: "unavailable_shift", value: "2026-07-14:night" });
+    expect(cons[0]).toMatchObject({
+      personId,
+      kind: "unavailable_shift",
+      value: "2026-07-14:night",
+    });
   });
 
   it("rejects editing another person's shift (spoofed personId)", async () => {
     await linkDana();
-    const [roni] = await db
-      .insert(schema.people)
-      .values({ teamId, name: "Roni" })
-      .returning();
+    const [roni] = await db.insert(schema.people).values({ teamId, name: "Roni" }).returning();
     stubAuth({ userId: "user_1", orgId: "org_A", orgRole: "org:member" });
     await expect(
       toggleMyShiftUnavailabilityAction(
@@ -350,12 +356,46 @@ describe("toggleMyShiftUnavailabilityAction (member self)", () => {
   });
 });
 
+describe("toggleKitchenBlockAction (admin)", () => {
+  it("blocks a person from kitchen on a day, then clears it", async () => {
+    stubAuth({ userId: "admin_1", orgId: "org_A", orgRole: "org:admin" });
+    await toggleKitchenBlockAction(
+      form({ personId: String(personId), date: "2026-07-14", blocked: "1" }),
+    );
+    const cons = await q.listConstraintsForWeek(teamId, "2026-07-12");
+    expect(cons).toHaveLength(1);
+    expect(cons[0]).toMatchObject({
+      personId,
+      kind: "blocked_kitchen",
+      value: "2026-07-14",
+    });
+    await toggleKitchenBlockAction(
+      form({ personId: String(personId), date: "2026-07-14", blocked: "0" }),
+    );
+    expect(await q.listConstraintsForWeek(teamId, "2026-07-12")).toHaveLength(0);
+  });
+
+  it("rejects a member (non-admin)", async () => {
+    stubAuth({ userId: "member_1", orgId: "org_A", orgRole: "org:member" });
+    await expect(
+      toggleKitchenBlockAction(
+        form({ personId: String(personId), date: "2026-07-14", blocked: "1" }),
+      ),
+    ).rejects.toThrow();
+    expect(await q.listConstraintsForWeek(teamId, "2026-07-12")).toHaveLength(0);
+  });
+});
+
 describe("blockWeekAction (admin)", () => {
   it("blocks all 7 days of a week for a person, then clears them", async () => {
     stubAuth({ userId: "admin_1", orgId: "org_A", orgRole: "org:admin" });
-    await blockWeekAction(form({ personId: String(personId), weekStart: "2026-07-16", blocked: "1" }));
+    await blockWeekAction(
+      form({ personId: String(personId), weekStart: "2026-07-16", blocked: "1" }),
+    );
     expect(await q.listConstraintsForWeek(teamId, "2026-07-16")).toHaveLength(7);
-    await blockWeekAction(form({ personId: String(personId), weekStart: "2026-07-16", blocked: "0" }));
+    await blockWeekAction(
+      form({ personId: String(personId), weekStart: "2026-07-16", blocked: "0" }),
+    );
     expect(await q.listConstraintsForWeek(teamId, "2026-07-16")).toHaveLength(0);
   });
 
@@ -387,16 +427,15 @@ describe("blockMyWeekAction (member self)", () => {
   it("lets a linked member block their own week", async () => {
     await linkDana();
     stubAuth({ userId: "user_1", orgId: "org_A", orgRole: "org:member" });
-    await blockMyWeekAction(form({ personId: String(personId), weekStart: "2026-07-16", blocked: "1" }));
+    await blockMyWeekAction(
+      form({ personId: String(personId), weekStart: "2026-07-16", blocked: "1" }),
+    );
     expect(await q.listConstraintsForWeek(teamId, "2026-07-16")).toHaveLength(7);
   });
 
   it("rejects blocking another person's week (spoofed personId)", async () => {
     await linkDana();
-    const [roni] = await db
-      .insert(schema.people)
-      .values({ teamId, name: "Roni" })
-      .returning();
+    const [roni] = await db.insert(schema.people).values({ teamId, name: "Roni" }).returning();
     stubAuth({ userId: "user_1", orgId: "org_A", orgRole: "org:member" });
     await expect(
       blockMyWeekAction(form({ personId: String(roni.id), weekStart: "2026-07-12", blocked: "1" })),
@@ -409,7 +448,9 @@ describe("blockMyWeekAction (member self)", () => {
     await db.update(schema.people).set({ active: false }).where(eq(schema.people.id, personId));
     stubAuth({ userId: "user_1", orgId: "org_A", orgRole: "org:member" });
     await expect(
-      blockMyWeekAction(form({ personId: String(personId), weekStart: "2026-07-12", blocked: "1" })),
+      blockMyWeekAction(
+        form({ personId: String(personId), weekStart: "2026-07-12", blocked: "1" }),
+      ),
     ).rejects.toThrow();
     expect(await q.listConstraintsForWeek(teamId, "2026-07-12")).toHaveLength(0);
   });
@@ -417,7 +458,9 @@ describe("blockMyWeekAction (member self)", () => {
   it("refuses an unlinked member", async () => {
     stubAuth({ userId: "user_1", orgId: "org_A", orgRole: "org:member" });
     await expect(
-      blockMyWeekAction(form({ personId: String(personId), weekStart: "2026-07-12", blocked: "1" })),
+      blockMyWeekAction(
+        form({ personId: String(personId), weekStart: "2026-07-12", blocked: "1" }),
+      ),
     ).rejects.toThrow();
     expect(await q.listConstraintsForWeek(teamId, "2026-07-12")).toHaveLength(0);
   });
@@ -446,7 +489,12 @@ describe("assignSlotAction (admin)", () => {
     stubAuth({ userId: "admin_1", orgId: "org_A", orgRole: "org:admin" });
 
     await assignSlotAction(
-      form({ weekStart: "2026-07-16", date: "2026-07-16", slot: "morning", personId: String(personId) }),
+      form({
+        weekStart: "2026-07-16",
+        date: "2026-07-16",
+        slot: "morning",
+        personId: String(personId),
+      }),
     );
 
     const rows = await q.listAssignments(teamId, "2026-07-16");
@@ -459,7 +507,12 @@ describe("assignSlotAction (admin)", () => {
     await q.addPerson(teamId, "Eli");
     const eli = (await q.listPeople(teamId)).find((p) => p.name === "Eli")!;
     await assignSlotAction(
-      form({ weekStart: "2026-07-16", date: "2026-07-16", slot: "morning", personId: String(personId) }),
+      form({
+        weekStart: "2026-07-16",
+        date: "2026-07-16",
+        slot: "morning",
+        personId: String(personId),
+      }),
     );
 
     await assignSlotAction(
@@ -481,7 +534,12 @@ describe("assignSlotAction (admin)", () => {
     stubAuth({ userId: "member_1", orgId: "org_A", orgRole: "org:member" });
     await expect(
       assignSlotAction(
-        form({ weekStart: "2026-07-16", date: "2026-07-16", slot: "morning", personId: String(personId) }),
+        form({
+          weekStart: "2026-07-16",
+          date: "2026-07-16",
+          slot: "morning",
+          personId: String(personId),
+        }),
       ),
     ).rejects.toThrow();
     expect(await q.listAssignments(teamId, "2026-07-16")).toHaveLength(0);
@@ -492,10 +550,17 @@ describe("clearSlotAction (admin)", () => {
   it("empties a filled seat", async () => {
     stubAuth({ userId: "admin_1", orgId: "org_A", orgRole: "org:admin" });
     await assignSlotAction(
-      form({ weekStart: "2026-07-16", date: "2026-07-16", slot: "morning", personId: String(personId) }),
+      form({
+        weekStart: "2026-07-16",
+        date: "2026-07-16",
+        slot: "morning",
+        personId: String(personId),
+      }),
     );
 
-    await clearSlotAction(form({ date: "2026-07-16", slot: "morning", personId: String(personId) }));
+    await clearSlotAction(
+      form({ date: "2026-07-16", slot: "morning", personId: String(personId) }),
+    );
 
     expect(await q.listAssignments(teamId, "2026-07-16")).toHaveLength(0);
   });
@@ -503,7 +568,12 @@ describe("clearSlotAction (admin)", () => {
   it("rejects a member (non-admin) and leaves the seat filled", async () => {
     stubAuth({ userId: "admin_1", orgId: "org_A", orgRole: "org:admin" });
     await assignSlotAction(
-      form({ weekStart: "2026-07-16", date: "2026-07-16", slot: "morning", personId: String(personId) }),
+      form({
+        weekStart: "2026-07-16",
+        date: "2026-07-16",
+        slot: "morning",
+        personId: String(personId),
+      }),
     );
 
     stubAuth({ userId: "member_1", orgId: "org_A", orgRole: "org:member" });

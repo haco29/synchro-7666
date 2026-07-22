@@ -4,6 +4,7 @@ import {
   blockWeekAction,
   linkPersonAction,
   setPersonActiveAction,
+  toggleKitchenBlockAction,
   toggleMyShiftUnavailabilityAction,
   toggleMyUnavailabilityAction,
   toggleShiftUnavailableAction,
@@ -47,24 +48,32 @@ const FREE_CLASSES =
  * are injected so the same cell serves an admin editing anyone and a member
  * editing only themselves. A whole-day off subsumes the shifts, so the shift
  * buttons are disabled (and dimmed) while it's set.
+ *
+ * `kitchenAction` is optional and admin-only: when provided, an extra "K"
+ * toggle blocks the person from KITCHEN duty that day while leaving their
+ * time-shifts open. Members never receive it, so the control is hidden for them.
  */
 function AvailabilityCell({
   dayAction,
   shiftAction,
+  kitchenAction,
   personId,
   personName,
   date,
   dayOff,
   shiftOffOf,
+  kitchenBlocked = false,
   active,
 }: {
   dayAction: (formData: FormData) => Promise<void>;
   shiftAction: (formData: FormData) => Promise<void>;
+  kitchenAction?: (formData: FormData) => Promise<void>;
   personId: number;
   personName: string;
   date: string;
   dayOff: boolean;
   shiftOffOf: (shift: ShiftType) => boolean;
+  kitchenBlocked?: boolean;
   active: boolean;
 }) {
   return (
@@ -106,6 +115,23 @@ function AvailabilityCell({
             </form>
           );
         })}
+        {kitchenAction && (
+          <form action={kitchenAction}>
+            <input type="hidden" name="personId" value={personId} />
+            <input type="hidden" name="date" value={date} />
+            <input type="hidden" name="blocked" value={kitchenBlocked ? "0" : "1"} />
+            <button
+              type="submit"
+              disabled={!active || dayOff}
+              aria-pressed={kitchenBlocked}
+              aria-label={`${personName} ${kitchenBlocked ? "blocked from" : "available for"} ${SLOT_LABELS.kitchen} on ${dayLabel(date)}`}
+              title={`${SLOT_LABELS.kitchen} — ${kitchenBlocked ? "blocked, click to clear" : "click to block"}`}
+              className={`h-6 w-6 rounded border text-[10px] disabled:opacity-40 ${kitchenBlocked ? OFF_CLASSES : FREE_CLASSES}`}
+            >
+              K
+            </button>
+          </form>
+        )}
       </div>
     </div>
   );
@@ -159,8 +185,7 @@ export default async function PeoplePage({
   searchParams: Promise<{ week?: string }>;
 }) {
   const { week } = await searchParams;
-  const weekStart =
-    week && isIsoDate(week) ? weekStartOf(week) : weekStartOf(todayIso());
+  const weekStart = week && isIsoDate(week) ? weekStartOf(week) : weekStartOf(todayIso());
   const teamId = await currentTeam();
   const admin = await isAdmin();
   const constraints = await listConstraintsForWeek(teamId, weekStart);
@@ -168,9 +193,12 @@ export default async function PeoplePage({
   // `${date}:${shift}:${personId}` (the shift value is already `date:shift`).
   const dayOff = new Set<string>();
   const shiftOff = new Set<string>();
+  // Per-day kitchen block, keyed `${date}:${personId}` (value is the date).
+  const kitchenBlocked = new Set<string>();
   for (const c of constraints) {
     if (c.kind === "unavailable_date") dayOff.add(`${c.value}:${c.personId}`);
     else if (c.kind === "unavailable_shift") shiftOff.add(`${c.value}:${c.personId}`);
+    else if (c.kind === "blocked_kitchen") kitchenBlocked.add(`${c.value}:${c.personId}`);
   }
   const dates = weekDates(weekStart);
 
@@ -180,13 +208,7 @@ export default async function PeoplePage({
     const roster = myId === null ? [] : await listPeopleWithUserLinks(teamId);
     const me = roster.find((p) => p.id === myId) ?? null;
     return (
-      <MemberView
-        weekStart={weekStart}
-        dates={dates}
-        me={me}
-        dayOff={dayOff}
-        shiftOff={shiftOff}
-      />
+      <MemberView weekStart={weekStart} dates={dates} me={me} dayOff={dayOff} shiftOff={shiftOff} />
     );
   }
 
@@ -200,6 +222,7 @@ export default async function PeoplePage({
       members={members}
       dayOff={dayOff}
       shiftOff={shiftOff}
+      kitchenBlocked={kitchenBlocked}
     />
   );
 }
@@ -277,6 +300,7 @@ function AdminView({
   members,
   dayOff,
   shiftOff,
+  kitchenBlocked,
 }: {
   weekStart: string;
   dates: string[];
@@ -284,6 +308,7 @@ function AdminView({
   members: OrgMember[];
   dayOff: Set<string>;
   shiftOff: Set<string>;
+  kitchenBlocked: Set<string>;
 }) {
   return (
     <div className="space-y-8">
@@ -311,9 +336,11 @@ function AdminView({
           <WeekNav weekStart={weekStart} hrefFor={(w) => `/shifts/people?week=${w}`} />
         </div>
         <p className="text-sm text-neutral-500">
-          Mark when each person is <strong>unavailable</strong> this week — a whole day, or a
-          single shift (<strong>M</strong>orning / <strong>E</strong>vening / <strong>N</strong>ight).
-          Kitchen and backup need a full day free — any block, whole-day or a single shift, rules them out that day.
+          Mark when each person is <strong>unavailable</strong> this week — a whole day, or a single
+          shift (<strong>M</strong>orning / <strong>E</strong>vening / <strong>N</strong>ight).
+          Kitchen and backup need a full day free — any block, whole-day or a single shift, rules
+          them out that day. The <strong>K</strong> toggle blocks only <strong>kitchen</strong> duty
+          that day, leaving the person free for their normal shifts.
         </p>
 
         {people.length === 0 ? (
@@ -349,95 +376,103 @@ function AdminView({
                       </td>
                     </tr>
                     {group.people.map((p) => (
-                  <tr
-                    key={p.id}
-                    className={`border-b border-neutral-100 dark:border-neutral-900 ${p.active ? "" : "opacity-50"}`}
-                  >
-                    <td className="py-2 pr-4 font-medium">{p.name}</td>
-                    <td className="px-2 py-2">
-                      <RotationSelect personId={p.id} personName={p.name} rotation={p.rotation} />
-                    </td>
-                    {dates.map((date) => (
-                      <td key={date} className="px-2 py-2 text-center">
-                        <AvailabilityCell
-                          dayAction={toggleUnavailableAction}
-                          shiftAction={toggleShiftUnavailableAction}
-                          personId={p.id}
-                          personName={p.name}
-                          date={date}
-                          dayOff={dayOff.has(`${date}:${p.id}`)}
-                          shiftOffOf={(shift) => shiftOff.has(`${date}:${shift}:${p.id}`)}
-                          active={p.active}
-                        />
-                      </td>
-                    ))}
-                    <td className="px-2 py-2 text-center">
-                      <BlockWeekButton
-                        action={blockWeekAction}
-                        personId={p.id}
-                        personName={p.name}
-                        weekStart={weekStart}
-                        fullyOff={dates.every((date) => dayOff.has(`${date}:${p.id}`))}
-                        active={p.active}
-                      />
-                    </td>
-                    <td className="py-2 pl-4">
-                      <form action={setPersonActiveAction}>
-                        <input type="hidden" name="personId" value={p.id} />
-                        <input type="hidden" name="active" value={p.active ? "0" : "1"} />
-                        <button
-                          type="submit"
-                          className="text-xs text-neutral-500 underline-offset-4 hover:underline"
-                        >
-                          {p.active ? "Deactivate" : "Reactivate"}
-                        </button>
-                      </form>
-                    </td>
-                    <td className="py-2 pl-4">
-                      <div className="flex items-center gap-2">
-                        <form action={linkPersonAction} className="flex items-center gap-1">
-                          <input type="hidden" name="personId" value={p.id} />
-                          <select
-                            name="clerkUserId"
-                            defaultValue={p.clerkUserId ?? ""}
-                            aria-label={`Link ${p.name} to a member`}
-                            className="rounded border border-neutral-300 bg-white px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
-                          >
-                            <option value="" disabled>
-                              — pick member —
-                            </option>
-                            {/* A prior link to someone no longer in the org still shows. */}
-                            {p.clerkUserId &&
-                              !members.some((m) => m.userId === p.clerkUserId) && (
-                                <option value={p.clerkUserId}>{p.clerkUserId} (not in org)</option>
-                              )}
-                            {members.map((m) => (
-                              <option key={m.userId} value={m.userId}>
-                                {m.label}
-                              </option>
-                            ))}
-                          </select>
-                          <button
-                            type="submit"
-                            className="rounded border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
-                          >
-                            Link
-                          </button>
-                        </form>
-                        {p.clerkUserId && (
-                          <form action={unlinkPersonAction}>
+                      <tr
+                        key={p.id}
+                        className={`border-b border-neutral-100 dark:border-neutral-900 ${p.active ? "" : "opacity-50"}`}
+                      >
+                        <td className="py-2 pr-4 font-medium">{p.name}</td>
+                        <td className="px-2 py-2">
+                          <RotationSelect
+                            personId={p.id}
+                            personName={p.name}
+                            rotation={p.rotation}
+                          />
+                        </td>
+                        {dates.map((date) => (
+                          <td key={date} className="px-2 py-2 text-center">
+                            <AvailabilityCell
+                              dayAction={toggleUnavailableAction}
+                              shiftAction={toggleShiftUnavailableAction}
+                              kitchenAction={toggleKitchenBlockAction}
+                              personId={p.id}
+                              personName={p.name}
+                              date={date}
+                              dayOff={dayOff.has(`${date}:${p.id}`)}
+                              shiftOffOf={(shift) => shiftOff.has(`${date}:${shift}:${p.id}`)}
+                              kitchenBlocked={kitchenBlocked.has(`${date}:${p.id}`)}
+                              active={p.active}
+                            />
+                          </td>
+                        ))}
+                        <td className="px-2 py-2 text-center">
+                          <BlockWeekButton
+                            action={blockWeekAction}
+                            personId={p.id}
+                            personName={p.name}
+                            weekStart={weekStart}
+                            fullyOff={dates.every((date) => dayOff.has(`${date}:${p.id}`))}
+                            active={p.active}
+                          />
+                        </td>
+                        <td className="py-2 pl-4">
+                          <form action={setPersonActiveAction}>
                             <input type="hidden" name="personId" value={p.id} />
+                            <input type="hidden" name="active" value={p.active ? "0" : "1"} />
                             <button
                               type="submit"
                               className="text-xs text-neutral-500 underline-offset-4 hover:underline"
                             >
-                              Unlink
+                              {p.active ? "Deactivate" : "Reactivate"}
                             </button>
                           </form>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
+                        </td>
+                        <td className="py-2 pl-4">
+                          <div className="flex items-center gap-2">
+                            <form action={linkPersonAction} className="flex items-center gap-1">
+                              <input type="hidden" name="personId" value={p.id} />
+                              <select
+                                name="clerkUserId"
+                                defaultValue={p.clerkUserId ?? ""}
+                                aria-label={`Link ${p.name} to a member`}
+                                className="rounded border border-neutral-300 bg-white px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
+                              >
+                                <option value="" disabled>
+                                  — pick member —
+                                </option>
+                                {/* A prior link to someone no longer in the org still shows. */}
+                                {p.clerkUserId &&
+                                  !members.some((m) => m.userId === p.clerkUserId) && (
+                                    <option value={p.clerkUserId}>
+                                      {p.clerkUserId} (not in org)
+                                    </option>
+                                  )}
+                                {members.map((m) => (
+                                  <option key={m.userId} value={m.userId}>
+                                    {m.label}
+                                  </option>
+                                ))}
+                              </select>
+                              <button
+                                type="submit"
+                                className="rounded border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
+                              >
+                                Link
+                              </button>
+                            </form>
+                            {p.clerkUserId && (
+                              <form action={unlinkPersonAction}>
+                                <input type="hidden" name="personId" value={p.id} />
+                                <button
+                                  type="submit"
+                                  className="text-xs text-neutral-500 underline-offset-4 hover:underline"
+                                >
+                                  Unlink
+                                </button>
+                              </form>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
                     ))}
                   </Fragment>
                 ))}

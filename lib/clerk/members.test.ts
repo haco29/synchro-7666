@@ -29,7 +29,14 @@ beforeEach(() => {
 describe("fetchOrgMembers", () => {
   it("maps members to {userId, label}, preferring full name", async () => {
     stubMembership([
-      { publicUserData: { userId: "user_1", firstName: "Dana", lastName: "Levi", identifier: "dana@x.com" } },
+      {
+        publicUserData: {
+          userId: "user_1",
+          firstName: "Dana",
+          lastName: "Levi",
+          identifier: "dana@x.com",
+        },
+      },
     ]);
 
     expect(await fetchOrgMembers("org_A")).toEqual([{ userId: "user_1", label: "Dana Levi" }]);
@@ -37,7 +44,14 @@ describe("fetchOrgMembers", () => {
 
   it("falls back to the identifier when there is no name", async () => {
     stubMembership([
-      { publicUserData: { userId: "user_2", firstName: null, lastName: null, identifier: "roni@x.com" } },
+      {
+        publicUserData: {
+          userId: "user_2",
+          firstName: null,
+          lastName: null,
+          identifier: "roni@x.com",
+        },
+      },
     ]);
 
     expect(await fetchOrgMembers("org_A")).toEqual([{ userId: "user_2", label: "roni@x.com" }]);
@@ -46,7 +60,14 @@ describe("fetchOrgMembers", () => {
   it("skips memberships with no public user data", async () => {
     stubMembership([
       { publicUserData: null },
-      { publicUserData: { userId: "user_3", firstName: "Ada", lastName: null, identifier: "ada@x.com" } },
+      {
+        publicUserData: {
+          userId: "user_3",
+          firstName: "Ada",
+          lastName: null,
+          identifier: "ada@x.com",
+        },
+      },
     ]);
 
     expect(await fetchOrgMembers("org_A")).toEqual([{ userId: "user_3", label: "Ada" }]);

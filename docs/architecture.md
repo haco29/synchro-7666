@@ -32,7 +32,7 @@ tenants** — a Clerk Organization maps 1:1 to an internal `teams` row
 - **Route gating is `proxy.ts`**, not `middleware.ts` (Next 16 renamed `middleware` → `proxy`;
   Node runtime).
 - **No `users` table** — Clerk owns identity. `people` are schedulable subjects, not app users.
-  A person *may* carry a `clerk_user_id` (admin-set link) so a member can self-serve their own
+  A person _may_ carry a `clerk_user_id` (admin-set link) so a member can self-serve their own
   availability, but this is a pointer, not an identity store — most people are unlinked
   ([ADR-0003](decisions/0003-member-self-availability.md)).
 - **Migrations are NOT automatic.** Vercel deploys code only. After any `lib/db/schema.ts` change:
