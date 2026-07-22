@@ -45,6 +45,13 @@ function assertHardRules(assignments: Assignment[], constraints: Constraint[]) {
         `kitchen on ${a.date} right after a night shift`,
       ).toBe(false);
     }
+    // night ends 07:00, morning starts 07:00 — no morning right after a night
+    if (a.slot === "morning") {
+      expect(
+        nightOn.has(`${addDays(a.date, -1)}:${a.personId}`),
+        `morning on ${a.date} right after a night shift`,
+      ).toBe(false);
+    }
   }
   const wholeDayOff = new Set(
     constraints.filter((c) => c.kind === "unavailable_date").map((c) => `${c.value}:${c.personId}`),
@@ -221,6 +228,41 @@ describe("generateWeek", () => {
         ),
       ).toBe(false);
       expect(withPrior.gaps.some((g) => g.date === WEEK && g.slot === "kitchen")).toBe(true);
+    }
+  });
+
+  it("never assigns morning to the previous day's night person", () => {
+    for (let seed = 0; seed < 20; seed++) {
+      const { assignments } = generateWeek(input({ people: roster(6), seed }));
+      assertHardRules(assignments, []);
+    }
+  });
+
+  it("keeps the prior week's last night person off morning on the first day", () => {
+    // Person 1's heavy night+kitchen history steers day-0 night and kitchen to
+    // the other two, who are then busy — so day-0 morning can only be person 1.
+    const people = roster(3);
+    const history: PersonHistory[] = [
+      { personId: 1, nightCount: 100, kitchenCount: 100, backupCount: 0, totalCount: 0 },
+    ];
+    for (let seed = 0; seed < 10; seed++) {
+      // Without the boundary input person 1 takes the day-0 morning seat…
+      const without = generateWeek(input({ people, history, seed }));
+      expect(
+        without.assignments.some(
+          (a) => a.date === WEEK && a.slot === "morning" && a.personId === 1,
+        ),
+      ).toBe(true);
+      // …but a night shift the day before the week starts rules them out: gap.
+      const withPrior = generateWeek(
+        input({ people, history, seed, priorNightPersonIds: [1] }),
+      );
+      expect(
+        withPrior.assignments.some(
+          (a) => a.date === WEEK && a.slot === "morning" && a.personId === 1,
+        ),
+      ).toBe(false);
+      expect(withPrior.gaps.some((g) => g.date === WEEK && g.slot === "morning")).toBe(true);
     }
   });
 

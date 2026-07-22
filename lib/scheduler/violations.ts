@@ -76,21 +76,32 @@ export function computeViolations(
     }
   }
 
-  // Night ends 07:00 the next morning — a full day of kitchen duty right after
-  // leaves no time to sleep, so that pairing is flagged on the kitchen seat.
+  // Night ends 07:00 the next morning. A full day of kitchen duty right after
+  // leaves no time to sleep, and a morning shift (starting 07:00) would run
+  // straight off the night as a ~16-hour stretch — both pairings are flagged.
   const nightOn = new Set(
     [...assignments, ...priorDayNights]
       .filter((a) => a.slot === "night")
       .map((a) => `${a.date}:${a.personId}`),
   );
   for (const a of assignments) {
-    if (a.slot === "kitchen" && nightOn.has(`${addDays(a.date, -1)}:${a.personId}`)) {
+    const afterNight = nightOn.has(`${addDays(a.date, -1)}:${a.personId}`);
+    if (a.slot === "kitchen" && afterNight) {
       violations.push({
         kind: "kitchen_after_night",
         date: a.date,
         slot: a.slot,
         personId: a.personId,
         message: `${nameOf(a.personId)} has kitchen duty on ${dayLabel(a.date)} right after a night shift`,
+      });
+    }
+    if (a.slot === "morning" && afterNight) {
+      violations.push({
+        kind: "morning_after_night",
+        date: a.date,
+        slot: a.slot,
+        personId: a.personId,
+        message: `${nameOf(a.personId)} has a morning shift on ${dayLabel(a.date)} right after a night shift`,
       });
     }
   }

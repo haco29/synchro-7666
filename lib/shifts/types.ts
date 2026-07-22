@@ -80,7 +80,8 @@ export interface GenerateInput {
   /**
    * People who worked night on the day before `weekStart` (the prior week's
    * last day). Night ends 07:00 into the week's first day, so they must not
-   * get kitchen duty then, and morning gets the usual after-night penalty.
+   * get kitchen duty OR a morning shift then — either would run straight off a
+   * night with no rest (a morning is a ~16-hour back-to-back stretch).
    */
   priorNightPersonIds?: number[];
   seed?: number;
@@ -91,7 +92,11 @@ export interface GenerateResult {
   gaps: Gap[];
 }
 
-export type ViolationKind = "double_booked" | "unavailable" | "kitchen_after_night";
+export type ViolationKind =
+  | "double_booked"
+  | "unavailable"
+  | "kitchen_after_night"
+  | "morning_after_night";
 
 export interface Violation {
   kind: ViolationKind;

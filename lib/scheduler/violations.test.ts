@@ -82,6 +82,48 @@ describe("computeViolations", () => {
     expect(computeViolations(assignments, [], people)).toEqual([]);
   });
 
+  it("flags a morning shift the day after a night shift", () => {
+    const assignments: Assignment[] = [
+      { date: "2026-07-13", slot: "night", personId: 1 },
+      { date: "2026-07-14", slot: "morning", personId: 1 },
+    ];
+    const violations = computeViolations(assignments, [], people);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toMatchObject({
+      kind: "morning_after_night",
+      date: "2026-07-14",
+      slot: "morning",
+      personId: 1,
+    });
+    expect(violations[0].message).toContain("Alice");
+  });
+
+  it("does not flag morning when the previous night was someone else's", () => {
+    const assignments: Assignment[] = [
+      { date: "2026-07-13", slot: "night", personId: 2 },
+      { date: "2026-07-14", slot: "morning", personId: 1 },
+    ];
+    expect(computeViolations(assignments, [], people)).toEqual([]);
+  });
+
+  it("flags first-day morning after a night shift from the prior week", () => {
+    const priorDayNights: Assignment[] = [
+      { date: "2026-07-11", slot: "night", personId: 1 },
+    ];
+    const assignments: Assignment[] = [
+      { date: "2026-07-12", slot: "morning", personId: 1 },
+    ];
+    const violations = computeViolations(assignments, [], people, priorDayNights);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toMatchObject({
+      kind: "morning_after_night",
+      date: "2026-07-12",
+      personId: 1,
+    });
+    // Without the prior-week context the same schedule is clean.
+    expect(computeViolations(assignments, [], people)).toEqual([]);
+  });
+
   it("flags a blocked time-shift and any kitchen/backup that day, but not the other time-shifts", () => {
     const constraints: Constraint[] = [
       { id: 1, personId: 1, kind: "unavailable_shift", value: "2026-07-13:morning" },
