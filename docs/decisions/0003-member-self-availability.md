@@ -104,3 +104,23 @@ identity is still resolved server-side and a member may still edit **only their 
   activation, or publish — so the ADR-0002 role model and the proxy-plus-recheck rule are intact.
   The admin equivalents (`toggleShiftUnavailableAction`, `blockWeekAction`) sit behind
   `requireAdmin()` like the rest of the admin surface.
+
+## Amendment (2026-07-23): backup becomes a mid-day 10:00–17:00 on-call shift
+
+Backup was a whole-day "rest / on-call" designation; it is now a lighter mid-day on-call shift,
+**10:00–17:00**, overlapping the morning shift and the front of the evening shift. It still does not
+count toward weekly workload, still balances on its own history, and still fills last (so it is what
+gaps when a day is short-staffed). Only two limitations change how availability gates it. This also
+supersedes the earlier note that a per-shift block leaves a person eligible for kitchen/backup:
+
+- **Availability gate.** Kitchen still needs the **whole day** free (any per-shift block disqualifies
+  it). Backup, because it spans only morning and evening, is ruled out **only** by a morning or
+  evening block — a **night-only** block leaves a person eligible for backup. A whole-day off still
+  blocks everything.
+- **After a night shift.** Whoever worked the previous night (ends 07:00) is now barred from backup
+  (starts 10:00) too, alongside the existing morning/kitchen bars — three hours is no real rest. In a
+  tight roster this can strand the post-night person and leave the (lowest-priority) backup slot
+  empty; that is accepted — the four work shifts are always staffed first.
+
+Both rules live in `lib/scheduler/generate.ts` (generation) and `lib/scheduler/violations.ts` (the
+post-edit warning check, which gains a `backup_after_night` violation kind).

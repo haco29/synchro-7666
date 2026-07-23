@@ -2,14 +2,20 @@ export type ShiftType = "morning" | "evening" | "night";
 export type SlotType = ShiftType | "kitchen" | "backup";
 
 export const SHIFT_TYPES: ShiftType[] = ["morning", "evening", "night"];
-export const SLOT_TYPES: SlotType[] = ["morning", "evening", "night", "kitchen", "backup"];
+/**
+ * All slot types, in the order columns are displayed on the week grid. Backup
+ * sits between morning and evening because it runs 10:00–17:00 — mid-day, across
+ * their handover. (Scheduling priority is separate: see FILL_ORDER in the
+ * scheduler.)
+ */
+export const SLOT_TYPES: SlotType[] = ["morning", "backup", "evening", "night", "kitchen"];
 
 export const SLOT_LABELS: Record<SlotType, string> = {
   morning: "Morning 07:00–15:00",
   evening: "Evening 15:00–23:00",
   night: "Night 23:00–07:00",
   kitchen: "Kitchen duty",
-  backup: "Backup (rest / on-call)",
+  backup: "Backup 10:00–17:00 (on-call)",
 };
 
 /** People needed per slot type per day — one per role. */
@@ -36,8 +42,10 @@ export interface Person {
  *   (ineligible for every slot, incl. kitchen and backup).
  * - `unavailable_shift`: value is `YYYY-MM-DD:<shift>`; the person is off that
  *   one time-shift (morning/evening/night) — still eligible for the OTHER
- *   time-shifts, but NOT for kitchen or backup, which require full-day
- *   availability, so any per-shift block that day rules them out.
+ *   time-shifts. It also rules them out of KITCHEN (which needs a full day
+ *   free, so any per-shift block disqualifies). For BACKUP (10:00–17:00), only
+ *   a morning or evening block rules them out — those are the shifts backup
+ *   overlaps; a night-only block leaves them eligible for backup.
  * - `blocked_kitchen`: value is an ISO date; the person may not be assigned
  *   KITCHEN duty that day — but stays eligible for every other slot (their
  *   normal time-shifts and backup).
@@ -103,6 +111,7 @@ export type ViolationKind =
   | "unavailable"
   | "kitchen_after_night"
   | "morning_after_night"
+  | "backup_after_night"
   | "kitchen_blocked";
 
 export interface Violation {

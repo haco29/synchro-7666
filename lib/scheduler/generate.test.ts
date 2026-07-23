@@ -46,6 +46,13 @@ function assertHardRules(assignments: Assignment[], constraints: Constraint[]) {
         `morning on ${a.date} right after a night shift`,
       ).toBe(false);
     }
+    // night ends 07:00, backup starts 10:00 — no backup right after a night
+    if (a.slot === "backup") {
+      expect(
+        nightOn.has(`${addDays(a.date, -1)}:${a.personId}`),
+        `backup on ${a.date} right after a night shift`,
+      ).toBe(false);
+    }
   }
   // a person blocked from kitchen on a date never gets kitchen that day
   const kitchenBlocked = new Set(
@@ -72,14 +79,31 @@ function assertHardRules(assignments: Assignment[], constraints: Constraint[]) {
       .filter((c) => c.kind === "unavailable_shift")
       .map((c) => `${c.value.split(":")[0]}:${c.personId}`),
   );
+  // Backup (10:00–17:00) overlaps morning and the front of evening but not
+  // night, so it is ruled out only by a morning or evening block that day.
+  const morningOrEveningOff = new Set(
+    constraints
+      .filter(
+        (c) =>
+          c.kind === "unavailable_shift" &&
+          (c.value.endsWith(":morning") || c.value.endsWith(":evening")),
+      )
+      .map((c) => `${c.value.split(":")[0]}:${c.personId}`),
+  );
   for (const a of assignments) {
     // never assigned on a whole-day off
     expect(wholeDayOff.has(`${a.date}:${a.personId}`), `assigned while off all day`).toBe(false);
-    if (a.slot === "kitchen" || a.slot === "backup") {
-      // kitchen/backup require a full day free — no per-shift block that day
+    if (a.slot === "kitchen") {
+      // kitchen requires a full day free — no per-shift block that day
       expect(
         anyShiftOff.has(`${a.date}:${a.personId}`),
-        `${a.slot} assigned despite a per-shift block`,
+        `kitchen assigned despite a per-shift block`,
+      ).toBe(false);
+    } else if (a.slot === "backup") {
+      // backup needs morning AND evening free — a night-only block is fine
+      expect(
+        morningOrEveningOff.has(`${a.date}:${a.personId}`),
+        `backup assigned despite a morning/evening block`,
       ).toBe(false);
     } else {
       // never assigned to a blocked time-shift
@@ -127,18 +151,23 @@ describe("generateWeek", () => {
     }
   });
 
-  it("assigns every person exactly one role a day when the roster equals the 5 roles", () => {
-    // 5 people, 5 roles/day → everyone works every day (one of them on backup rest)
+  it("staffs every work shift with a 5-person roster; only backup may gap", () => {
+    // 5 people, 5 roles/day. The after-night rest rule bars the post-night
+    // person from morning, kitchen AND backup, leaving them only night/evening
+    // — so on a tight roster the greedy engine can strand them and leave the
+    // lowest-priority backup (on-call) slot empty. The four work shifts are
+    // always staffed and the hard rules always hold; any gap lands on backup.
     const { assignments, gaps } = generateWeek(input({ people: roster(5) }));
-    expect(gaps).toHaveLength(0);
-    const totals = new Map<number, number>();
-    for (const a of assignments) {
-      totals.set(a.personId, (totals.get(a.personId) ?? 0) + 1);
+    assertHardRules(assignments, []);
+    expect(gaps.every((g) => g.slot === "backup")).toBe(true);
+    for (const date of weekDates(WEEK)) {
+      for (const slot of ["morning", "evening", "night", "kitchen"] as const) {
+        expect(
+          assignments.some((a) => a.date === date && a.slot === slot),
+          `${slot} on ${date} should be staffed`,
+        ).toBe(true);
+      }
     }
-    const counts = [...totals.values()];
-    expect(counts).toHaveLength(5);
-    expect(Math.max(...counts)).toBe(7);
-    expect(Math.min(...counts)).toBe(7);
   });
 
   it("keeps cumulative night, kitchen and backup/rest fair across 4 consecutive weeks", () => {
@@ -374,16 +403,17 @@ describe("generateWeek", () => {
     }
     // Person 1 still gets used on D — but only for the other time-shifts.
     expect(slotsSeen.size).toBeGreaterThan(0);
-    // The blocked shift and both full-day roles are off-limits that day.
+    // The blocked morning is off-limits, and so are kitchen (needs a full day
+    // free) and backup (needs morning free) that day.
     expect(slotsSeen.has("morning")).toBe(false);
     expect(slotsSeen.has("kitchen")).toBe(false);
     expect(slotsSeen.has("backup")).toBe(false);
   });
 
-  it("makes a person blocked on any shift ineligible for kitchen/backup too", () => {
-    // Person 2 is off the whole day; person 1 is blocked for just one shift.
-    // Kitchen and backup require a full day free, so neither person can cover
-    // them — those slots gap rather than being filled by the shift-blocked P1.
+  it("makes a person blocked on morning ineligible for kitchen and backup too", () => {
+    // Person 2 is off the whole day; person 1 is blocked for the morning shift.
+    // Kitchen needs a full day free and backup needs morning free, so neither
+    // person can cover them — those slots gap rather than being filled by P1.
     const people = roster(2);
     const D = addDays(WEEK, 1);
     const constraints: Constraint[] = [
@@ -404,8 +434,10 @@ describe("generateWeek", () => {
 
   it("steers backup away from someone already far ahead on rest (history-seeded)", () => {
     // Backup is zero-weight for work load but balanced on its own history. A
-    // person way ahead on backups must not keep drawing the rest role — even
-    // though a naive weekTotal rule would pick them (their work total is low).
+    // person way ahead on backups must draw the rest role far less than others
+    // — even though a naive weekTotal rule would pick them (their work total is
+    // low). It isn't strictly zero only because the after-night rule can leave
+    // them the sole eligible candidate on a tight day (better to fill than gap).
     const people = roster(6);
     const history: PersonHistory[] = people.map((p) => ({
       personId: p.id,
@@ -414,11 +446,103 @@ describe("generateWeek", () => {
       backupCount: p.id === 1 ? 100 : 0,
       totalCount: 0,
     }));
+    let p1Backups = 0;
+    let othersBackups = 0;
     for (let seed = 0; seed < 10; seed++) {
       const { assignments } = generateWeek(input({ people, history, seed }));
-      const p1Backups = assignments.filter((a) => a.slot === "backup" && a.personId === 1);
-      expect(p1Backups).toHaveLength(0);
+      for (const a of assignments.filter((a) => a.slot === "backup")) {
+        if (a.personId === 1) p1Backups++;
+        else othersBackups++;
+      }
     }
+    // Person 1 draws the rest role well below even a single other person's
+    // average share (othersBackups / 5), let alone their own fair share.
+    expect(p1Backups).toBeLessThan(othersBackups / 5);
+  });
+
+  it("keeps a night-only-blocked person eligible for backup (no full day needed)", () => {
+    // Backup (10:00–17:00) overlaps morning and evening but NOT night, so a
+    // block on just the night shift must not disqualify backup. Person 1 is
+    // blocked for night every day; everyone else gets a big backup-history head
+    // start so the rest role is steered to person 1 whenever they're free.
+    const people = roster(6);
+    const constraints: Constraint[] = weekDates(WEEK).map((d, i) => ({
+      id: i + 1,
+      personId: 1,
+      kind: "unavailable_shift" as const,
+      value: `${d}:night`,
+    }));
+    const history: PersonHistory[] = people.map((p) => ({
+      personId: p.id,
+      nightCount: 0,
+      kitchenCount: 0,
+      backupCount: p.id === 1 ? 0 : 100,
+      totalCount: 0,
+    }));
+    let p1Backups = 0;
+    for (let seed = 0; seed < 10; seed++) {
+      const { assignments } = generateWeek(input({ people, constraints, history, seed }));
+      assertHardRules(assignments, constraints);
+      p1Backups += assignments.filter((a) => a.slot === "backup" && a.personId === 1).length;
+      // Never night (blocked) and never kitchen (a per-shift block removes the
+      // full day kitchen still needs) — but backup stays open.
+      expect(
+        assignments.some((a) => a.personId === 1 && (a.slot === "night" || a.slot === "kitchen")),
+      ).toBe(false);
+    }
+    expect(p1Backups).toBeGreaterThan(0);
+  });
+
+  it("bars backup for a person blocked on morning or evening that day", () => {
+    const people = roster(6);
+    const D = addDays(WEEK, 2);
+    for (const shift of ["morning", "evening"] as const) {
+      const constraints: Constraint[] = [
+        { id: 1, personId: 1, kind: "unavailable_shift", value: `${D}:${shift}` },
+      ];
+      for (let seed = 0; seed < 15; seed++) {
+        const { assignments } = generateWeek(input({ people, constraints, seed }));
+        assertHardRules(assignments, constraints);
+        expect(
+          assignments.some((a) => a.date === D && a.slot === "backup" && a.personId === 1),
+          `${shift}-blocked person must not get backup`,
+        ).toBe(false);
+      }
+    }
+  });
+
+  it("keeps the prior week's last night person off backup on the first day", () => {
+    // Night ends 07:00, backup starts 10:00 — no real sleep, same as the
+    // morning/kitchen after-night rule. Everyone but person 1 has a big backup
+    // head start, so without a prior night person 1 lands day-0 backup; a prior
+    // night rules them out.
+    const people = roster(6);
+    const history: PersonHistory[] = people.map((p) => ({
+      personId: p.id,
+      nightCount: 0,
+      kitchenCount: 0,
+      backupCount: p.id === 1 ? 0 : 100,
+      totalCount: 0,
+    }));
+    let withoutHits = 0;
+    for (let seed = 0; seed < 15; seed++) {
+      const without = generateWeek(input({ people, history, seed }));
+      if (
+        without.assignments.some((a) => a.date === WEEK && a.slot === "backup" && a.personId === 1)
+      ) {
+        withoutHits++;
+      }
+      const withPrior = generateWeek(input({ people, history, seed, priorNightPersonIds: [1] }));
+      expect(
+        withPrior.assignments.some(
+          (a) => a.date === WEEK && a.slot === "backup" && a.personId === 1,
+        ),
+        "prior-night person must not get day-0 backup",
+      ).toBe(false);
+    }
+    // Sanity: without the prior night person 1 does land day-0 backup, so the
+    // absence above is the boundary rule at work, not chance.
+    expect(withoutHits).toBeGreaterThan(0);
   });
 
   it("blocks a whole-day-off person from every role, including kitchen and backup", () => {

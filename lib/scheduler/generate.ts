@@ -3,11 +3,12 @@ import { SLOT_CAPACITY } from "../shifts/types";
 import { addDays, weekDates } from "../shifts/week";
 
 /**
- * Fill order within each day. Work roles come first — night (scarcest fairness
- * budget) and kitchen ahead of morning/evening — so real shifts always take
- * priority over the rest day. Backup is filled LAST from whoever remains,
- * scored by rest history so the rest perk still rotates fairly; when a day is
- * short-staffed it is backup that gaps, never a work shift.
+ * Fill order within each day. Full work roles come first — night (scarcest
+ * fairness budget) and kitchen ahead of morning/evening — so they always take
+ * priority over backup. Backup (10:00–17:00) is a lighter mid-day on-call
+ * shift: filled LAST from whoever remains, scored by its own history so the
+ * perk still rotates fairly; when a day is short-staffed it is backup that
+ * gaps, never a full work shift.
  */
 const FILL_ORDER: SlotType[] = ["night", "kitchen", "morning", "evening", "backup"];
 
@@ -91,24 +92,32 @@ export function generateWeek(input: GenerateInput): GenerateResult {
 
   for (const date of dates) {
     for (const slot of FILL_ORDER) {
-      // Kitchen and backup demand a full day free: any per-shift block that
-      // day disqualifies them. Time-shifts are blocked only by a matching
-      // per-shift block for that specific shift. Both kitchen and morning
-      // additionally exclude whoever worked the previous night — night ends
-      // 07:00, so kitchen duty would leave no time to sleep and a morning
-      // (starting 07:00) would be a ~16-hour back-to-back stretch. (FILL_ORDER
-      // puts night before both, so the previous day's night is always known.)
+      // Availability by slot: a time-shift is blocked only by a matching
+      // per-shift block. Kitchen is a full-day duty, so any per-shift block
+      // that day disqualifies it. Backup (10:00–17:00) overlaps morning and
+      // the front of evening but NOT night, so it only needs those two shifts
+      // free — a night-only block leaves the person eligible for backup.
+      // Kitchen, morning AND backup additionally exclude whoever worked the
+      // previous night — night ends 07:00, so kitchen duty, a 07:00 morning,
+      // and a 10:00 backup all leave no real time to sleep. (FILL_ORDER puts
+      // night first, so the previous day's night is always known.)
       const isTimeShift = slot !== "kitchen" && slot !== "backup";
+      const availableForSlot = (id: number) =>
+        isTimeShift
+          ? !shiftOff.has(`${date}:${slot}:${id}`)
+          : slot === "kitchen"
+            ? !anyShiftOff.has(`${date}:${id}`)
+            : !shiftOff.has(`${date}:morning:${id}`) && !shiftOff.has(`${date}:evening:${id}`);
       const sleptOff =
-        slot === "kitchen" || slot === "morning" ? nightOn.get(addDays(date, -1)) : undefined;
+        slot === "kitchen" || slot === "morning" || slot === "backup"
+          ? nightOn.get(addDays(date, -1))
+          : undefined;
       for (let seat = 0; seat < SLOT_CAPACITY[slot]; seat++) {
         const candidates = input.people.filter(
           (p) =>
             p.active &&
             !wholeDayOff.has(`${date}:${p.id}`) &&
-            (isTimeShift
-              ? !shiftOff.has(`${date}:${slot}:${p.id}`)
-              : !anyShiftOff.has(`${date}:${p.id}`)) &&
+            availableForSlot(p.id) &&
             !(slot === "kitchen" && kitchenBlocked.has(`${date}:${p.id}`)) &&
             !sleptOff?.has(p.id) &&
             !busyOn.get(date)?.has(p.id),
@@ -122,9 +131,9 @@ export function generateWeek(input: GenerateInput): GenerateResult {
         let best = candidates[0];
         let bestScore = Infinity;
         for (const p of candidates) {
-          // Backup is a rest day: it never adds to the work-load total, so being
-          // on backup doesn't make a person "look busy". It balances on its own
-          // rest history instead, so the rest perk rotates evenly.
+          // Backup is a lighter on-call shift: it never adds to the work-load
+          // total, so being on backup doesn't make a person "look busy". It
+          // balances on its own history instead, so the perk rotates evenly.
           let score = isBackup
             ? (backupHist.get(p.id) ?? 0) * W_BACKUP_BALANCE
             : (weekTotal.get(p.id) ?? 0) * W_WEEK_TOTAL;
