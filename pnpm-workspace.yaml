@@ -1,2 +1,15 @@
-onlyBuiltDependencies:
-  - esbuild
+# pnpm settings for this project (not a monorepo "workspace" — pnpm 11 reads its
+# project config from this file).
+
+# Approve the native build scripts our Next.js stack needs. pnpm 11 blocks all
+# install-time build scripts by default until each is explicitly allowed here.
+allowBuilds:
+  esbuild: true
+  sharp: true
+  unrs-resolver: true
+
+# Trust our committed lockfile: skip re-verifying every entry against the global
+# minimumReleaseAge supply-chain gate on each install. Without this, an install
+# fails whenever a locked transitive dep was published in the last ~24h —
+# recurring, time-based friction. New/changed resolutions are still policy-checked.
+trustLockfile: true

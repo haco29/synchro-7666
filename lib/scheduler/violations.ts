@@ -42,8 +42,10 @@ export function computeViolations(
   }
 
   // Whole-day off conflicts with any slot. A per-shift block conflicts with an
-  // assignment to that same time-shift, and — because kitchen/backup require
-  // full-day availability — with any kitchen/backup assignment that day.
+  // assignment to that same time-shift; with any kitchen assignment that day
+  // (kitchen needs a full day free); and — because backup (10:00–17:00) spans
+  // morning and the front of evening — with a backup assignment when the block
+  // is on morning or evening (a night-only block does not conflict with backup).
   const wholeDayOff = new Set(
     constraints.filter((c) => c.kind === "unavailable_date").map((c) => `${c.value}:${c.personId}`),
   );
@@ -62,11 +64,15 @@ export function computeViolations(
     constraints.filter((c) => c.kind === "blocked_kitchen").map((c) => `${c.value}:${c.personId}`),
   );
   for (const a of assignments) {
-    const fullDaySlot = a.slot === "kitchen" || a.slot === "backup";
+    const backupBlocked =
+      a.slot === "backup" &&
+      (shiftOff.has(`${a.date}:morning:${a.personId}`) ||
+        shiftOff.has(`${a.date}:evening:${a.personId}`));
     if (
       wholeDayOff.has(`${a.date}:${a.personId}`) ||
       shiftOff.has(`${a.date}:${a.slot}:${a.personId}`) ||
-      (fullDaySlot && anyShiftOff.has(`${a.date}:${a.personId}`))
+      (a.slot === "kitchen" && anyShiftOff.has(`${a.date}:${a.personId}`)) ||
+      backupBlocked
     ) {
       violations.push({
         kind: "unavailable",
@@ -87,9 +93,9 @@ export function computeViolations(
     }
   }
 
-  // Night ends 07:00 the next morning. A full day of kitchen duty right after
-  // leaves no time to sleep, and a morning shift (starting 07:00) would run
-  // straight off the night as a ~16-hour stretch — both pairings are flagged.
+  // Night ends 07:00 the next morning. Kitchen duty, a morning shift (07:00),
+  // and a backup shift (10:00) all right after leave no real time to sleep —
+  // all three pairings are flagged.
   const nightOn = new Set(
     [...assignments, ...priorDayNights]
       .filter((a) => a.slot === "night")
@@ -113,6 +119,15 @@ export function computeViolations(
         slot: a.slot,
         personId: a.personId,
         message: `${nameOf(a.personId)} has a morning shift on ${dayLabel(a.date)} right after a night shift`,
+      });
+    }
+    if (a.slot === "backup" && afterNight) {
+      violations.push({
+        kind: "backup_after_night",
+        date: a.date,
+        slot: a.slot,
+        personId: a.personId,
+        message: `${nameOf(a.personId)} has a backup shift on ${dayLabel(a.date)} right after a night shift`,
       });
     }
   }

@@ -158,7 +158,7 @@ describe("computeViolations", () => {
     ).toEqual([]);
   });
 
-  it("flags a blocked time-shift and any kitchen/backup that day, but not the other time-shifts", () => {
+  it("flags a blocked time-shift, plus kitchen and backup per their availability rules", () => {
     const constraints: Constraint[] = [
       { id: 1, personId: 1, kind: "unavailable_shift", value: "2026-07-13:morning" },
     ];
@@ -174,8 +174,8 @@ describe("computeViolations", () => {
     expect(
       computeViolations(otherShift, constraints, people).filter((v) => v.kind === "unavailable"),
     ).toHaveLength(0);
-    // But kitchen and backup need a full day free, so the morning block makes
-    // either of them an unavailable violation that day.
+    // Kitchen needs a full day free, and backup needs morning free, so a morning
+    // block makes either of them an unavailable violation that day.
     for (const slot of ["kitchen", "backup"] as const) {
       const fullDay: Assignment[] = [{ date: "2026-07-13", slot, personId: 1 }];
       const v = computeViolations(fullDay, constraints, people).filter(
@@ -184,5 +184,59 @@ describe("computeViolations", () => {
       expect(v, `${slot} should be flagged`).toHaveLength(1);
       expect(v[0]).toMatchObject({ kind: "unavailable", slot, personId: 1 });
     }
+  });
+
+  it("does not flag backup when only the night shift is blocked (backup skips night)", () => {
+    // Backup (10:00–17:00) overlaps morning and evening but not night, so a
+    // night-only block leaves backup clean — while kitchen (full day) is flagged.
+    const constraints: Constraint[] = [
+      { id: 1, personId: 1, kind: "unavailable_shift", value: "2026-07-13:night" },
+    ];
+    const backup: Assignment[] = [{ date: "2026-07-13", slot: "backup", personId: 1 }];
+    expect(
+      computeViolations(backup, constraints, people).filter((v) => v.kind === "unavailable"),
+    ).toHaveLength(0);
+    const kitchen: Assignment[] = [{ date: "2026-07-13", slot: "kitchen", personId: 1 }];
+    expect(
+      computeViolations(kitchen, constraints, people).filter((v) => v.kind === "unavailable"),
+    ).toHaveLength(1);
+  });
+
+  it("flags a backup shift the day after a night shift", () => {
+    const assignments: Assignment[] = [
+      { date: "2026-07-13", slot: "night", personId: 1 },
+      { date: "2026-07-14", slot: "backup", personId: 1 },
+    ];
+    const violations = computeViolations(assignments, [], people);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toMatchObject({
+      kind: "backup_after_night",
+      date: "2026-07-14",
+      slot: "backup",
+      personId: 1,
+    });
+    expect(violations[0].message).toContain("Alice");
+  });
+
+  it("does not flag backup when the previous night was someone else's", () => {
+    const assignments: Assignment[] = [
+      { date: "2026-07-13", slot: "night", personId: 2 },
+      { date: "2026-07-14", slot: "backup", personId: 1 },
+    ];
+    expect(computeViolations(assignments, [], people)).toEqual([]);
+  });
+
+  it("flags first-day backup after a night shift from the prior week", () => {
+    const priorDayNights: Assignment[] = [{ date: "2026-07-11", slot: "night", personId: 1 }];
+    const assignments: Assignment[] = [{ date: "2026-07-12", slot: "backup", personId: 1 }];
+    const violations = computeViolations(assignments, [], people, priorDayNights);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toMatchObject({
+      kind: "backup_after_night",
+      date: "2026-07-12",
+      personId: 1,
+    });
+    // Without the prior-week context the same schedule is clean.
+    expect(computeViolations(assignments, [], people)).toEqual([]);
   });
 });

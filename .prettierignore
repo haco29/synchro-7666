@@ -12,3 +12,6 @@ coverage/
 
 # Vendored agent skills (not our code)
 .agents/
+
+# Local, gitignored tool-managed files (Claude Code rewrites these itself)
+.claude/settings.local.json
