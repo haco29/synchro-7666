@@ -6,12 +6,12 @@ import { requireAdmin, requireLinkedMember } from "@/lib/auth";
 import { listOrgMembers } from "@/lib/clerk/members";
 import {
   addPerson,
+  assignmentsOn,
   historyBefore,
   isPersonActive,
   linkPersonToUser,
   listConstraintsForWeek,
   listPeople,
-  nightAssignmentsOn,
   removeAssignment,
   renamePerson,
   replaceWeekAssignments,
@@ -267,15 +267,18 @@ export async function generateWeekAction(formData: FormData) {
   // Schedules are live-edited — there is no publish gate. Overwriting manual
   // tweaks is guarded in the UI by a "Regenerate" confirm, not a server flag.
   const seed = Date.now() % 2 ** 31;
+  // The prior week's last day feeds two cross-boundary rules: the hard
+  // after-night exclusions (via the night people) and the soft rest-gap penalty
+  // (via every slot). Fetch it once and derive both.
+  const priorDay = await assignmentsOn(teamId, addDays(weekStart, -1));
   const result = generateWeek({
     weekStart,
     people: await listPeople(teamId),
     constraints: await listConstraintsForWeek(teamId, weekStart),
     history: await historyBefore(teamId, weekStart),
     // Whoever worked the prior week's last night can't take kitchen on day one.
-    priorNightPersonIds: (await nightAssignmentsOn(teamId, addDays(weekStart, -1))).map(
-      (a) => a.personId,
-    ),
+    priorNightPersonIds: priorDay.filter((a) => a.slot === "night").map((a) => a.personId),
+    priorDayAssignments: priorDay.map((a) => ({ personId: a.personId, slot: a.slot })),
     seed,
   });
   await replaceWeekAssignments(teamId, weekStart, result.assignments);

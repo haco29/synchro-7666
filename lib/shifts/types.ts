@@ -15,8 +15,32 @@ export const SLOT_LABELS: Record<SlotType, string> = {
   evening: "Evening 15:00–23:00",
   night: "Night 23:00–07:00",
   kitchen: "Kitchen duty",
-  backup: "Backup 10:00–17:00 (on-call)",
+  backup: "Backup 10:00–17:00",
 };
+
+/**
+ * Each slot's clock span as hours from that day's midnight; overnight ends use
+ * +24 (night ends 07:00 → 31). Kitchen has no fixed clock — it is modelled as
+ * the longest working day so any adjacent shift reads as near-zero rest: it is
+ * the heaviest slot to recover from. Used to score rest between a person's
+ * consecutive shifts (see the scheduler's rest-gap penalty).
+ */
+export const SLOT_HOURS: Record<SlotType, { start: number; end: number }> = {
+  morning: { start: 7, end: 15 },
+  evening: { start: 15, end: 23 },
+  night: { start: 23, end: 31 }, // ends 07:00 next day
+  backup: { start: 10, end: 17 },
+  kitchen: { start: 7, end: 23 }, // modelled full working day
+};
+
+/**
+ * Rest hours between a `prev` slot worked on some day and a `next` slot the day
+ * after (the later shift's start is +24). Same-day pairings never reach here —
+ * one slot per person per day is enforced upstream.
+ */
+export function restHoursBetween(prev: SlotType, next: SlotType): number {
+  return SLOT_HOURS[next].start + 24 - SLOT_HOURS[prev].end;
+}
 
 /** People needed per slot type per day — one per role. */
 export const SLOT_CAPACITY: Record<SlotType, number> = {
@@ -98,6 +122,13 @@ export interface GenerateInput {
    * night with no rest (a morning is a ~16-hour back-to-back stretch).
    */
   priorNightPersonIds?: number[];
+  /**
+   * The prior week's last-day assignments (all slots). Seeds the rest-gap
+   * penalty so a short turnaround off that day — e.g. an evening then a 07:00
+   * morning on the week's first day — is discouraged across the week boundary,
+   * not just within the week.
+   */
+  priorDayAssignments?: { personId: number; slot: SlotType }[];
   seed?: number;
 }
 
