@@ -468,6 +468,21 @@ export async function nightAssignmentsOn(teamId: number, date: string): Promise<
   return rows.map((r) => ({ date: r.date, slot: r.slot as SlotType, personId: r.personId }));
 }
 
+/**
+ * All of the team's assignments on one date, regardless of which week row they
+ * live in. Used to seed the scheduler's rest-gap penalty across the week
+ * boundary: callers pass the day before a weekStart to learn what each person
+ * worked on the prior week's last day.
+ */
+export async function assignmentsOn(teamId: number, date: string): Promise<Assignment[]> {
+  const rows = await getDb()
+    .select({ date: assignments.date, slot: assignments.slot, personId: assignments.personId })
+    .from(assignments)
+    .innerJoin(weeks, eq(assignments.weekId, weeks.id))
+    .where(and(eq(weeks.teamId, teamId), eq(assignments.date, date)));
+  return rows.map((r) => ({ date: r.date, slot: r.slot as SlotType, personId: r.personId }));
+}
+
 export async function replaceWeekAssignments(
   teamId: number,
   weekStart: string,

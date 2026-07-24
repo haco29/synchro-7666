@@ -1,5 +1,5 @@
 import type { Assignment, Gap, GenerateInput, GenerateResult, SlotType } from "../shifts/types";
-import { SLOT_CAPACITY } from "../shifts/types";
+import { restHoursBetween, SLOT_CAPACITY } from "../shifts/types";
 import { addDays, weekDates } from "../shifts/week";
 
 /**
@@ -14,10 +14,35 @@ const FILL_ORDER: SlotType[] = ["night", "kitchen", "morning", "evening", "backu
 
 /** Scoring weights: lower score wins the slot. */
 const W_WEEK_TOTAL = 1;
+// Kitchen is the heaviest slot — demanding full-day duty — so it rotates most
+// protectively: its balance weight sits above night's.
+const W_KITCHEN_BALANCE = 4;
 const W_NIGHT_BALANCE = 3;
-const W_KITCHEN_BALANCE = 2;
 const W_BACKUP_BALANCE = 3;
 const W_TIEBREAK = 0.01;
+
+// Soft rest-gap penalty. A person handed two shifts less than MIN_REST_HOURS
+// apart (e.g. an 8h "clopening": evening then next-day morning, or night then
+// next-day evening) is scored worse — the shorter the gap, the bigger the hit —
+// so the scheduler minimizes short turnarounds without ever forbidding them: if
+// the penalized person is still the best fit they are chosen and no slot gaps.
+// The penalty scales by how heavy the shift being recovered FROM was, so coming
+// off kitchen costs more rest than coming off a night (kitchen > night).
+const MIN_REST_HOURS = 11;
+const W_REST_GAP = 0.6;
+const RECOVERY_WEIGHT: Partial<Record<SlotType, number>> = { kitchen: 2, night: 1.5 };
+
+/**
+ * Score penalty for working `next` the day after `prev`. Zero once the rest gap
+ * reaches MIN_REST_HOURS; below that it grows as the gap shrinks and is scaled
+ * by how heavy `prev` was to recover from — so at an equal gap, coming off
+ * kitchen costs more than off a night, which costs more than a plain shift.
+ */
+export function restGapPenalty(prev: SlotType, next: SlotType): number {
+  const rest = restHoursBetween(prev, next);
+  if (rest >= MIN_REST_HOURS) return 0;
+  return (MIN_REST_HOURS - rest) * W_REST_GAP * (RECOVERY_WEIGHT[prev] ?? 1);
+}
 
 /** Deterministic PRNG (mulberry32) so a given seed always yields one schedule. */
 function makeRng(seed: number): () => number {
@@ -35,7 +60,10 @@ function makeRng(seed: number): () => number {
  * with the lowest fairness score. Hard rules are structural: one slot per
  * person per day, unavailable people are never eligible, and the previous
  * night's person never gets kitchen OR a morning shift the next day (they need
- * to sleep). Unfillable positions are returned as gaps, never silently dropped.
+ * to sleep). On top of the hard rules, a soft rest-gap penalty discourages
+ * short turnarounds between a person's consecutive-day shifts (weighted most
+ * heavily coming off kitchen, then night). Unfillable positions are returned as
+ * gaps, never silently dropped.
  */
 export function generateWeek(input: GenerateInput): GenerateResult {
   const rng = makeRng(input.seed ?? 1);
@@ -81,10 +109,20 @@ export function generateWeek(input: GenerateInput): GenerateResult {
   const weekTotal = new Map<number, number>();
   const busyOn = new Map<string, Set<number>>(); // date -> personIds assigned
   const nightOn = new Map<string, Set<number>>(); // date -> personIds on night
+  const dayShift = new Map<string, SlotType>(); // `${personId}:${date}` -> slot
   // Seed with the prior week's last night so the after-night rules (no kitchen,
   // no morning) hold across the week boundary, not just within the week.
   if (input.priorNightPersonIds?.length) {
     nightOn.set(addDays(input.weekStart, -1), new Set(input.priorNightPersonIds));
+  }
+  // Seed each person's prior-day slot so the rest-gap penalty catches a short
+  // turnaround off the previous week's last day (e.g. its evening into a 07:00
+  // morning on day one), the same way nightOn is seeded above.
+  if (input.priorDayAssignments?.length) {
+    const priorDate = addDays(input.weekStart, -1);
+    for (const a of input.priorDayAssignments) {
+      dayShift.set(`${a.personId}:${priorDate}`, a.slot);
+    }
   }
 
   const assignments: Assignment[] = [];
@@ -143,6 +181,9 @@ export function generateWeek(input: GenerateInput): GenerateResult {
           if (slot === "kitchen") {
             score += (kitchenHist.get(p.id) ?? 0) * W_KITCHEN_BALANCE;
           }
+          // Discourage a short turnaround off yesterday's shift (see restGapPenalty).
+          const prevSlot = dayShift.get(`${p.id}:${addDays(date, -1)}`);
+          if (prevSlot) score += restGapPenalty(prevSlot, slot);
           score += rng() * W_TIEBREAK;
           if (score < bestScore) {
             bestScore = score;
@@ -153,6 +194,7 @@ export function generateWeek(input: GenerateInput): GenerateResult {
         assignments.push({ date, slot, personId: best.id });
         if (!busyOn.has(date)) busyOn.set(date, new Set());
         busyOn.get(date)!.add(best.id);
+        dayShift.set(`${best.id}:${date}`, slot);
         if (isBackup) {
           backupHist.set(best.id, (backupHist.get(best.id) ?? 0) + 1);
         } else {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { generateWeek } from "./generate";
-import { SLOT_CAPACITY, SLOT_TYPES } from "../shifts/types";
+import { generateWeek, restGapPenalty } from "./generate";
+import { restHoursBetween, SLOT_CAPACITY, SLOT_TYPES } from "../shifts/types";
 import type { Assignment, Constraint, GenerateInput, Person, PersonHistory } from "../shifts/types";
 import { addDays, weekDates } from "../shifts/week";
 
@@ -622,5 +622,152 @@ describe("no roster-order bias", () => {
     const last = ids[ids.length - 1];
     expect(nights.get(first)! / nights.get(last)!).toBeLessThan(1.25);
     expect(backups.get(first)! / backups.get(last)!).toBeLessThan(1.25);
+  });
+});
+
+describe("restHoursBetween", () => {
+  it("measures rest from one shift's end to the next day's shift start", () => {
+    expect(restHoursBetween("evening", "morning")).toBe(8); // 23:00 → 07:00 clopening
+    expect(restHoursBetween("night", "evening")).toBe(8); // 07:00 → 15:00
+    expect(restHoursBetween("kitchen", "morning")).toBe(8); // modelled 23:00 → 07:00
+    expect(restHoursBetween("evening", "backup")).toBe(11); // 23:00 → 10:00
+    expect(restHoursBetween("morning", "morning")).toBe(16); // 15:00 → 07:00
+    expect(restHoursBetween("night", "morning")).toBe(0); // 07:00 → 07:00
+  });
+});
+
+describe("restGapPenalty", () => {
+  it("is zero once the gap reaches the minimum rest window", () => {
+    expect(restGapPenalty("morning", "morning")).toBe(0); // 16h
+    expect(restGapPenalty("evening", "backup")).toBe(0); // 11h — at the threshold
+    expect(restGapPenalty("evening", "night")).toBe(0); // 24h
+  });
+
+  it("grows as the gap shrinks", () => {
+    // night→morning (0h) hurts more than night→evening (8h).
+    expect(restGapPenalty("night", "morning")).toBeGreaterThan(restGapPenalty("night", "evening"));
+  });
+
+  it("weights recovery so kitchen costs most, then night, at an equal gap", () => {
+    // All three are 8h turnarounds — only the recovery weight of the shift being
+    // left differs, and that is exactly "kitchen concerns more than a night".
+    const kitchen = restGapPenalty("kitchen", "morning");
+    const night = restGapPenalty("night", "evening");
+    const plain = restGapPenalty("evening", "morning");
+    expect(kitchen).toBeCloseTo(3.6); // (11-8) * 0.6 * 2
+    expect(night).toBeCloseTo(2.7); // (11-8) * 0.6 * 1.5
+    expect(plain).toBeCloseTo(1.8); // (11-8) * 0.6 * 1
+    expect(kitchen).toBeGreaterThan(night);
+    expect(night).toBeGreaterThan(plain);
+  });
+});
+
+describe("rest-gap penalty (soft spacing)", () => {
+  // The prior day's shift is seeded via priorDayAssignments so the turnaround is
+  // deterministic. Each "without" run confirms the person WOULD otherwise land
+  // the slot, so the "with" run's absence is the penalty at work, not chance.
+  function landsDayZero(res: ReturnType<typeof generateWeek>, slot: string, personId: number) {
+    return res.assignments.some(
+      (a) => a.date === WEEK && a.slot === slot && a.personId === personId,
+    );
+  }
+
+  it("steers day-one morning away from someone who worked evening the day before", () => {
+    const people = roster(6);
+    let without = 0;
+    let withPrior = 0;
+    for (let seed = 0; seed < 30; seed++) {
+      if (landsDayZero(generateWeek(input({ people, seed })), "morning", 1)) without++;
+      const prior = generateWeek(
+        input({ people, seed, priorDayAssignments: [{ personId: 1, slot: "evening" }] }),
+      );
+      if (landsDayZero(prior, "morning", 1)) withPrior++;
+    }
+    expect(without).toBeGreaterThan(0); // P1 would otherwise draw some day-0 mornings
+    expect(withPrior).toBe(0); // the 8h evening→morning gap steers them off it
+  });
+
+  it("steers day-one evening away from someone who worked night the day before", () => {
+    // night→evening is an 8h gap the hard after-night rules never covered.
+    const people = roster(6);
+    let without = 0;
+    let withPrior = 0;
+    for (let seed = 0; seed < 30; seed++) {
+      if (landsDayZero(generateWeek(input({ people, seed })), "evening", 1)) without++;
+      const prior = generateWeek(
+        input({ people, seed, priorDayAssignments: [{ personId: 1, slot: "night" }] }),
+      );
+      if (landsDayZero(prior, "evening", 1)) withPrior++;
+    }
+    expect(without).toBeGreaterThan(0);
+    expect(withPrior).toBe(0);
+  });
+
+  it("steers day-one morning away from someone who worked kitchen the day before", () => {
+    const people = roster(6);
+    let without = 0;
+    let withPrior = 0;
+    for (let seed = 0; seed < 30; seed++) {
+      if (landsDayZero(generateWeek(input({ people, seed })), "morning", 1)) without++;
+      const prior = generateWeek(
+        input({ people, seed, priorDayAssignments: [{ personId: 1, slot: "kitchen" }] }),
+      );
+      if (landsDayZero(prior, "morning", 1)) withPrior++;
+    }
+    expect(without).toBeGreaterThan(0);
+    expect(withPrior).toBe(0);
+  });
+
+  it("minimizes but never forbids a short turnaround — fills it when no one else can", () => {
+    // P1's heavy night+kitchen history funnels day-0 night and kitchen to the
+    // other two, who are then busy — so P1 is the sole candidate left for day-0
+    // morning. Even with an 8h evening→morning penalty, the seat is filled by
+    // P1, not left to gap: the penalty is soft.
+    const people = roster(3);
+    const history: PersonHistory[] = [
+      { personId: 1, nightCount: 100, kitchenCount: 100, backupCount: 0, totalCount: 0 },
+    ];
+    for (let seed = 0; seed < 10; seed++) {
+      const res = generateWeek(
+        input({ people, history, seed, priorDayAssignments: [{ personId: 1, slot: "evening" }] }),
+      );
+      expect(landsDayZero(res, "morning", 1)).toBe(true);
+      expect(res.gaps.some((g) => g.date === WEEK && g.slot === "morning")).toBe(false);
+    }
+  });
+
+  it("keeps the existing hard after-night rules intact alongside the soft penalty", () => {
+    for (let seed = 0; seed < 20; seed++) {
+      const { assignments } = generateWeek(
+        input({ people: roster(6), seed, priorDayAssignments: [{ personId: 1, slot: "night" }] }),
+      );
+      assertHardRules(assignments, []);
+    }
+  });
+});
+
+describe("kitchen is the heaviest slot (fairness)", () => {
+  it("draws kitchen far less for someone already far ahead on kitchen duty", () => {
+    // Kitchen's balance weight sits above night's, so a person way ahead on
+    // kitchen history must draw the duty far less than others — the same shape
+    // as the backup-rest fairness guard.
+    const people = roster(6);
+    const history: PersonHistory[] = people.map((p) => ({
+      personId: p.id,
+      nightCount: 0,
+      kitchenCount: p.id === 1 ? 100 : 0,
+      backupCount: 0,
+      totalCount: 0,
+    }));
+    let p1Kitchen = 0;
+    let othersKitchen = 0;
+    for (let seed = 0; seed < 10; seed++) {
+      const { assignments } = generateWeek(input({ people, history, seed }));
+      for (const a of assignments.filter((a) => a.slot === "kitchen")) {
+        if (a.personId === 1) p1Kitchen++;
+        else othersKitchen++;
+      }
+    }
+    expect(p1Kitchen).toBeLessThan(othersKitchen / 5);
   });
 });
